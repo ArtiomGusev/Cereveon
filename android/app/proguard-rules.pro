@@ -11,13 +11,13 @@
 
 # API model classes are serialized/deserialized via org.json (JSONObject field
 # access by string name). Keep their public members so R8 does not rename them.
--keepclassmembers class ai.chesscoach.app.**ApiModels** { public *; }
--keepclassmembers class ai.chesscoach.app.**Models** { public *; }
--keep class ai.chesscoach.app.CoachApiModels** { *; }
--keep class ai.chesscoach.app.GameApiModels** { *; }
--keep class ai.chesscoach.app.AuthApiModels** { *; }
--keep class ai.chesscoach.app.EngineEvalApiModels** { *; }
--keep class ai.chesscoach.app.LiveMoveApiModels** { *; }
+-keepclassmembers class com.cereveon.myapp.**ApiModels** { public *; }
+-keepclassmembers class com.cereveon.myapp.**Models** { public *; }
+-keep class com.cereveon.myapp.CoachApiModels** { *; }
+-keep class com.cereveon.myapp.GameApiModels** { *; }
+-keep class com.cereveon.myapp.AuthApiModels** { *; }
+-keep class com.cereveon.myapp.EngineEvalApiModels** { *; }
+-keep class com.cereveon.myapp.LiveMoveApiModels** { *; }
 
 # Kotlin coroutines
 -keepclassmembernames class kotlinx.** {

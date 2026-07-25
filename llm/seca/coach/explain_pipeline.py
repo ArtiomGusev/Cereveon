@@ -31,8 +31,17 @@ logger = logging.getLogger(__name__)
 # can be reached by changing env without editing code.
 #
 #   COACH_DEEPSEEK_API_BASE   default ``https://api.deepseek.com``
-#   COACH_DEEPSEEK_MODEL      default ``deepseek-chat`` (V3)
+#   COACH_DEEPSEEK_MODEL      default ``deepseek-v4-flash`` (V4, non-thinking)
 #   COACH_DEEPSEEK_API_KEY    required at runtime (no default)
+#
+# NOTE (2026-07-06): the legacy ``deepseek-chat`` name was RETIRED by
+# DeepSeek early (the API now 400s "supported model names are
+# deepseek-v4-pro or deepseek-v4-flash").  ``deepseek-v4-flash`` is the
+# drop-in successor (same OpenAI-compatible wire format, same price as
+# deepseek-chat was — the ``_PRICE_PER_1K`` table in observability.py
+# already carries a v4-flash row).  Prod was hot-fixed via the
+# ``COACH_DEEPSEEK_MODEL`` env override on the Hetzner box; this default
+# makes a fresh deploy correct without the override too.
 #
 # The Ollama variant of this module previously read
 # ``COACH_OLLAMA_URL`` / ``COACH_OLLAMA_MODEL`` / ``COACH_OLLAMA_NUM_CTX``;
@@ -43,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 DEEPSEEK_API_BASE = os.getenv("COACH_DEEPSEEK_API_BASE", "https://api.deepseek.com").rstrip("/")
 DEEPSEEK_URL = f"{DEEPSEEK_API_BASE}/chat/completions"
-MODEL_NAME = os.getenv("COACH_DEEPSEEK_MODEL", "deepseek-chat")
+MODEL_NAME = os.getenv("COACH_DEEPSEEK_MODEL", "deepseek-v4-flash")
 
 #: Retry budget — sourced from ``llm.rag.llm.config.MAX_MODE_2_RETRIES``
 #: so the four LLM-bearing pipelines stay in lock-step.  PR 11

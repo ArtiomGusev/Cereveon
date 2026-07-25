@@ -52,7 +52,7 @@ explicit `RuntimeError` at startup — the server will not start.
 | `CORS_ALLOWED_ORIGINS` | yes | *(empty — blocks all cross-origin)* | Comma-separated list of allowed CORS origins (e.g. `https://app.example.com`). Empty value blocks all cross-origin requests and logs a warning. |
 | `COACH_DEEPSEEK_API_KEY` | yes | *(none)* | DeepSeek API key (sign up at platform.deepseek.com). Without it, every `/chat` call falls back to the deterministic template — coaching degrades, doesn't error. |
 | `COACH_DEEPSEEK_API_BASE` | no | `https://api.deepseek.com` | OpenAI-compatible endpoint. Override only for self-hosted gateways. |
-| `COACH_DEEPSEEK_MODEL` | no | `deepseek-chat` | DeepSeek-V3. ~$0.14/M in + $0.28/M out. |
+| `COACH_DEEPSEEK_MODEL` | no | `deepseek-v4-flash` | DeepSeek-V4 non-thinking. ~$0.14/M in + $0.28/M out. |
 | `STOCKFISH_PATH` | no | auto-detected | Override path to Stockfish binary. Auto-detection checks `PATH`, then `/usr/games/stockfish` (Linux) or `engines/stockfish.exe` (Windows). |
 | `DATABASE_URL` | no | `sqlite:///data/seca.db` | SQLAlchemy DB URL. Use Postgres in production for multi-worker deployments. |
 | `REDIS_URL` | no | *(in-memory only)* | Redis URL for persistent move cache. Omit to use local in-memory cache. |

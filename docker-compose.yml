@@ -13,11 +13,11 @@ services:
       # LLM provider: DeepSeek (https://api.deepseek.com).  Set
       # COACH_DEEPSEEK_API_KEY in your shell or .env so the container
       # inherits it.  COACH_DEEPSEEK_API_BASE / COACH_DEEPSEEK_MODEL
-      # default to https://api.deepseek.com / deepseek-chat and
+      # default to https://api.deepseek.com / deepseek-v4-flash and
       # rarely need overriding.
       COACH_DEEPSEEK_API_KEY: ${COACH_DEEPSEEK_API_KEY:-}
       COACH_DEEPSEEK_API_BASE: ${COACH_DEEPSEEK_API_BASE:-https://api.deepseek.com}
-      COACH_DEEPSEEK_MODEL: ${COACH_DEEPSEEK_MODEL:-deepseek-chat}
+      COACH_DEEPSEEK_MODEL: ${COACH_DEEPSEEK_MODEL:-deepseek-v4-flash}
       STOCKFISH_PATH: ${STOCKFISH_PATH:-/usr/games/stockfish}
       REDIS_URL: ${REDIS_URL:-}
     ports:

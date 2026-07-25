@@ -57,12 +57,12 @@ DeepSeek API key (https://platform.deepseek.com)
 
 Default model:
 
-deepseek-chat (DeepSeek-V3, OpenAI-compatible /chat/completions)
+deepseek-v4-flash (DeepSeek-V4 non-thinking, OpenAI-compatible /chat/completions)
 
 3.2 Required Environment Variables
 COACH_DEEPSEEK_API_KEY=sk-...      # DeepSeek API key, required for live LLM
 COACH_DEEPSEEK_API_BASE=https://api.deepseek.com   # optional override
-COACH_DEEPSEEK_MODEL=deepseek-chat  # optional override (default DeepSeek-V3)
+COACH_DEEPSEEK_MODEL=deepseek-v4-flash  # optional override (default DeepSeek-V4 non-thinking)
 
 
 If `COACH_DEEPSEEK_API_KEY` is missing, the system still serves but every
@@ -192,7 +192,7 @@ WARNING log lines are the operator signal.
 
 Status
 
-DeepSeek-V3 (`deepseek-chat`) is the production default.  Switching
+DeepSeek-V4 non-thinking (`deepseek-v4-flash`) is the production default.  Switching
 to a different OpenAI-compatible model or provider is one env-var
 change.
 

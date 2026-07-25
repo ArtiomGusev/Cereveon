@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # can be reached by changing env without editing code.
 #
 #   COACH_DEEPSEEK_API_BASE   default ``https://api.deepseek.com``
-#   COACH_DEEPSEEK_MODEL      default ``deepseek-chat`` (V3)
+#   COACH_DEEPSEEK_MODEL      default ``deepseek-v4-flash`` (V4, non-thinking)
 #   COACH_DEEPSEEK_API_KEY    required at runtime (no default)
 #
 # The Ollama variant of this module previously read
@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 DEEPSEEK_API_BASE = os.getenv("COACH_DEEPSEEK_API_BASE", "https://api.deepseek.com").rstrip("/")
 DEEPSEEK_URL = f"{DEEPSEEK_API_BASE}/chat/completions"
-MODEL_NAME = os.getenv("COACH_DEEPSEEK_MODEL", "deepseek-chat")
+MODEL_NAME = os.getenv("COACH_DEEPSEEK_MODEL", "deepseek-v4-flash")
 
 #: Retry budget — sourced from ``llm.rag.llm.config.MAX_MODE_2_RETRIES``
 #: so the four LLM-bearing pipelines stay in lock-step.  PR 11

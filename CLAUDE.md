@@ -129,7 +129,7 @@ See `.env.example` for the full reference. Key variables:
 | `SECRET_KEY` | — | JWT signing secret (≥ 32 chars; required in `prod`) |
 | `COACH_DEEPSEEK_API_KEY` | — | **Required** for LLM coaching. Sign up at platform.deepseek.com. |
 | `COACH_DEEPSEEK_API_BASE` | `https://api.deepseek.com` | OpenAI-compatible endpoint; override for self-hosted gateways |
-| `COACH_DEEPSEEK_MODEL` | `deepseek-chat` | DeepSeek-V3. Alternative: `deepseek-reasoner` (chain-of-thought, ~4× cost) |
+| `COACH_DEEPSEEK_MODEL` | `deepseek-v4-flash` | DeepSeek-V4 (non-thinking; successor to the retired `deepseek-chat`). Alternative: `deepseek-v4-pro` (thinking, ~higher cost) |
 | `STOCKFISH_PATH` | auto-detected | Override Stockfish binary path |
 | `REDIS_URL` | *(unset)* | Redis for move cache; omit for in-memory only |
 | `STUDY_PLAN_LICHESS_ENABLED` | `1` | Fetch study-plan day-3/day-7 practice puzzles live from Lichess (`/api/puzzle/next`), matched to the day-0 mistake's theme + side + ROLE (defence-themes fetch the `defensiveMove` angle so the player practices saving their own piece), preferring multi-move puzzles. Set `0` to use the local corpus only. Falls back to the corpus on any failure regardless. |

@@ -642,7 +642,7 @@ def test_proguard_rules_preserve_api_model_classes():
     assert (
         "-keepattributes SourceFile,LineNumberTable" in proguard
     ), "Stack-trace line numbers must be preserved for crash reporting"
-    assert "ai.chesscoach.app" in proguard, "API model classes in ai.chesscoach.app must be kept"
+    assert "com.cereveon.myapp" in proguard, "API model classes in com.cereveon.myapp must be kept"
     assert (
         "public *" in proguard
     ), "Public members of model classes must be kept for org.json field access"

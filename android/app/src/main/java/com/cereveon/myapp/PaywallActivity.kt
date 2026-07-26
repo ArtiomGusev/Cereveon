@@ -14,45 +14,43 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
-import androidx.lifecycle.lifecycleScope
-import com.android.billingclient.api.AcknowledgePurchaseParams
-import com.android.billingclient.api.BillingClient
-import com.android.billingclient.api.BillingClientStateListener
-import com.android.billingclient.api.BillingFlowParams
-import com.android.billingclient.api.BillingResult
-import com.android.billingclient.api.PendingPurchasesParams
-import com.android.billingclient.api.Purchase
-import com.android.billingclient.api.PurchasesUpdatedListener
-import com.android.billingclient.api.QueryProductDetailsParams
-import kotlinx.coroutines.launch
+import com.revenuecat.purchases.CustomerInfo
+import com.revenuecat.purchases.Offering
+import com.revenuecat.purchases.PackageType
+import com.revenuecat.purchases.PurchaseParams
+import com.revenuecat.purchases.Purchases
+import com.revenuecat.purchases.getOfferingsWith
+import com.revenuecat.purchases.logInWith
+import com.revenuecat.purchases.purchaseWith
 
 /**
  * Cereveon · Atrium · Paywall (handoff screen #11).
  *
  * Reached from SettingsBottomSheet → "Upgrade · Premium" chevron row.
  *
- * Purchase flow (Play Billing → server verify → Pro)
- * --------------------------------------------------
- *  1. Begin → connect [billingClient], query the selected plan's
- *     subscription product ([PLAY_PRODUCT_IDS]), launch the Play
- *     purchase sheet.
- *  2. [purchasesUpdatedListener] receives the PURCHASED result and
- *     posts the purchase token to POST /billing/google/verify — the
- *     SERVER is the entitlement authority; a local purchase result is
- *     never trusted on its own (docs/API_CONTRACTS.md §36).
- *  3. Only on a verified `plan == "pro"` ([verifyOutcome]): acknowledge
- *     the purchase with Play, cache the plan locally
- *     ([PREF_PLAYER_PLAN]), and finish into the Pro state.
- *  4. Any verify failure keeps the paywall open AND leaves the purchase
- *     unacknowledged — Play auto-refunds unacknowledged purchases, so a
- *     dead server can never silently keep the user's money.  Reopening
- *     the paywall retries pending verification via the purchases-updated
- *     listener on the next purchase attempt.
+ * Purchase flow (RevenueCat → "pro" entitlement → Pro)
+ * ----------------------------------------------------
+ *  1. [prepareBilling] pins the RevenueCat identity to the server player
+ *     id (`logIn`) so the purchase is attributable, and pre-fetches the
+ *     current offering.
+ *  2. Subscribe → [startPurchase] launches the RevenueCat purchase for
+ *     the selected plan's package (monthly / annual).  RevenueCat
+ *     validates the receipt with Play AND acknowledges it — there is no
+ *     manual acknowledge / server-verify round-trip anymore.
+ *  3. On success, if the customer's ACTIVE entitlements include
+ *     [PRO_ENTITLEMENT] ([grantsPro]): cache the plan locally
+ *     ([PREF_PLAYER_PLAN]) for instant UI and finish.  The SERVER plan
+ *     flips authoritatively out-of-band via the RevenueCat webhook
+ *     (POST /billing/revenuecat/webhook), keyed on the app_user_id we set
+ *     in step 1.
+ *  4. User cancellation is silent; any other failure keeps the paywall
+ *     open (the user is never charged for a purchase that didn't clear).
  *
  * The static plan catalogue ([DEFAULT_PLANS] / [DEFAULT_FEATURES] /
- * [recommendedPlanKey]) is unchanged from the scaffold pass — display
- * pricing stays design-driven for now; the Play product catalogue only
- * decides what is PURCHASED, keyed by [PLAY_PRODUCT_IDS].
+ * [recommendedPlanKey]) is display copy: it decides what the tiles SAY.
+ * What gets BILLED is the Play product attached to each RevenueCat
+ * package in the RevenueCat dashboard, selected here by
+ * [packageTypeFor].
  */
 class PaywallActivity : AppCompatActivity() {
 
@@ -68,43 +66,16 @@ class PaywallActivity : AppCompatActivity() {
         AuthRepository(EncryptedTokenStorage(this))
     }
 
-    private val billingApi: BillingApiClient by lazy {
-        HttpBillingApiClient(
-            baseUrl = BuildConfig.COACH_API_BASE,
-            apiKey = BuildConfig.COACH_API_KEY,
-            tokenProvider = { authRepo.getToken() },
-            tokenSink = { newToken -> authRepo.saveToken(newToken) },
-        )
-    }
-
     /**
-     * Play Billing results arrive here — including purchases completed
-     * in a previous session that Play redelivers on reconnect, which is
-     * what retries a purchase whose server verify failed last time.
+     * The current RevenueCat offering, fetched in [onCreate].  Null until
+     * the fetch returns (or if it fails / billing is unconfigured); the
+     * Subscribe tap ([startPurchase]) handles a null offering gracefully.
      */
-    private val purchasesUpdatedListener = PurchasesUpdatedListener { result, purchases ->
-        when {
-            result.responseCode == BillingClient.BillingResponseCode.OK && purchases != null ->
-                purchases.forEach(::handlePurchase)
-            result.responseCode == BillingClient.BillingResponseCode.USER_CANCELED ->
-                Unit // deliberate dismissal — no toast noise
-            else ->
-                toastOnUi("Purchase did not complete (code ${result.responseCode})")
-        }
-    }
-
-    private lateinit var billingClient: BillingClient
+    private var currentOffering: Offering? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_paywall)
-
-        billingClient = BillingClient.newBuilder(this)
-            .setListener(purchasesUpdatedListener)
-            .enablePendingPurchases(
-                PendingPurchasesParams.newBuilder().enableOneTimeProducts().build()
-            )
-            .build()
 
         // Theme runs edge-to-edge; without this listener the bottom
         // "Subscribe" / "Maybe later" footer would render
@@ -128,9 +99,9 @@ class PaywallActivity : AppCompatActivity() {
 
         // DEFAULT_PLANS is the single source for the tile copy — the XML
         // values are pre-bind placeholders.  What gets BILLED is the Play
-        // Console product behind PLAY_PRODUCT_IDS; these labels must be
-        // kept in lock-step with the prices configured there (pinned by
-        // PaywallActivityTest's launch-pricing test).
+        // product attached to the RevenueCat package these tiles select
+        // (see packageTypeFor); keep these labels in lock-step with the
+        // prices configured there (pinned by PaywallActivityTest).
         DEFAULT_PLANS.firstOrNull { it.key == "monthly" }?.let {
             monthlyPrice.text = it.price
             monthlySub.text = it.sub
@@ -146,127 +117,105 @@ class PaywallActivity : AppCompatActivity() {
         selectPlan(selectedPlanKey)
 
         findViewById<Button>(R.id.btnPaywallBegin).setOnClickListener {
-            startPurchase(productIdFor(selectedPlanKey))
+            startPurchase()
         }
         findViewById<TextView>(R.id.btnPaywallMaybeLater).setOnClickListener {
             finish()
         }
+
+        prepareBilling()
     }
 
-    override fun onDestroy() {
-        if (this::billingClient.isInitialized) {
-            billingClient.endConnection()
-        }
-        super.onDestroy()
-    }
+    // ── RevenueCat billing ───────────────────────────────────────────
 
-    // ── Play Billing flow ────────────────────────────────────────────
-
-    private fun startPurchase(productId: String) {
-        if (billingClient.isReady) {
-            queryAndLaunch(productId)
+    /**
+     * Pin the RevenueCat identity to the server player id and pre-fetch
+     * the current offering so the Subscribe tap can launch immediately.
+     *
+     * `logIn(playerId)` makes RevenueCat's `app_user_id` equal the server
+     * player UUID — the key the webhook maps on
+     * (POST /billing/revenuecat/webhook).  Without it a purchase would be
+     * attributed to an anonymous id the server can't resolve, and the
+     * plan would never flip server-side.
+     */
+    private fun prepareBilling() {
+        if (!Purchases.isConfigured) {
+            // No RevenueCat key in this build (see CereveonApplication) —
+            // the paywall renders but can't sell. Guard the tap in
+            // startPurchase() rather than crash here.
+            Log.w(TAG, "RevenueCat not configured — paywall is display-only")
             return
         }
-        billingClient.startConnection(object : BillingClientStateListener {
-            override fun onBillingSetupFinished(result: BillingResult) {
-                if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                    queryAndLaunch(productId)
-                } else {
-                    // No Play services / not signed in / emulator without
-                    // Play — the paywall stays open and harmless.
-                    toastOnUi("Google Play billing unavailable (code ${result.responseCode})")
-                }
-            }
-
-            override fun onBillingServiceDisconnected() {
-                // Next Begin tap reconnects; no retry loop needed here.
-            }
-        })
-    }
-
-    private fun queryAndLaunch(productId: String) {
-        val params = QueryProductDetailsParams.newBuilder()
-            .setProductList(
-                listOf(
-                    QueryProductDetailsParams.Product.newBuilder()
-                        .setProductId(productId)
-                        .setProductType(BillingClient.ProductType.SUBS)
-                        .build()
-                )
+        val playerId = (authRepo.authState() as? AuthState.Authenticated)
+            ?.playerId
+            ?.takeIf { it.isNotBlank() }
+        if (playerId != null) {
+            Purchases.sharedInstance.logInWith(
+                playerId,
+                onError = { error -> Log.w(TAG, "RevenueCat logIn failed: $error") },
+                onSuccess = { _, _ -> },
             )
-            .build()
-        billingClient.queryProductDetailsAsync(params) { result, productDetailsList ->
-            val details = productDetailsList.firstOrNull()
-            if (result.responseCode != BillingClient.BillingResponseCode.OK || details == null) {
-                toastOnUi("Plan not available right now — try again shortly")
-                return@queryProductDetailsAsync
-            }
-            // Subscriptions always carry at least one offer; the base
-            // plan's token is the first entry when no targeted offer
-            // applies.  A missing token means the Play product is
-            // misconfigured (not a client bug) — fail soft.
-            val offerToken = details.subscriptionOfferDetails?.firstOrNull()?.offerToken
-            if (offerToken == null) {
-                toastOnUi("Plan not available right now — try again shortly")
-                return@queryProductDetailsAsync
-            }
-            val flowParams = BillingFlowParams.newBuilder()
-                .setProductDetailsParamsList(
-                    listOf(
-                        BillingFlowParams.ProductDetailsParams.newBuilder()
-                            .setProductDetails(details)
-                            .setOfferToken(offerToken)
-                            .build()
-                    )
-                )
-                .build()
-            runOnUiThread { billingClient.launchBillingFlow(this, flowParams) }
+        } else {
+            // Paywall is only reached from a logged-in Settings sheet, so
+            // this is defensive — but an unattributable purchase is worse
+            // than none, so log it loudly.
+            Log.w(TAG, "no player id available — a purchase would be unattributable")
         }
+        Purchases.sharedInstance.getOfferingsWith(
+            onError = { error ->
+                Log.w(TAG, "offerings fetch failed: $error")
+                toastOnUi("Plans are unavailable right now — try again shortly")
+            },
+            onSuccess = { offerings -> currentOffering = offerings.current },
+        )
     }
 
-    private fun handlePurchase(purchase: Purchase) {
-        if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) {
-            // PENDING (e.g. cash top-up pending) — Play redelivers via the
-            // listener once it completes; nothing to verify yet.
+    private fun startPurchase() {
+        if (!Purchases.isConfigured) {
+            toastOnUi("In-app purchases aren't available on this build")
             return
         }
-        val productId = purchase.products.firstOrNull() ?: return
-        lifecycleScope.launch {
-            val result = billingApi.verifyGooglePurchase(purchase.purchaseToken, productId)
-            when (verifyOutcome(result)) {
-                VerifyOutcome.PRO_ACTIVATED -> {
-                    acknowledgeIfNeeded(purchase)
-                    cachePlan("pro")
-                    toastOnUi("Premium active — welcome aboard")
-                    finish()
-                }
-                VerifyOutcome.KEEP_PAYWALL -> {
-                    // Purchase stays UNACKNOWLEDGED on purpose: if the
-                    // server stays unreachable, Play refunds it — the
-                    // user is never charged for an entitlement the
-                    // server never granted.
-                    Log.w(TAG, "verify failed for $productId: $result")
-                    toastOnUi(
-                        "Could not confirm the purchase with the coach server — " +
-                            "it will be retried, you won't be double-charged"
-                    )
-                }
-            }
+        val offering = currentOffering
+        if (offering == null) {
+            toastOnUi("Plans are still loading — try again in a moment")
+            return
         }
+        val target = packageTypeFor(selectedPlanKey)
+        val pkg = offering.availablePackages.firstOrNull { it.packageType == target }
+        if (pkg == null) {
+            // The offering exists but carries no package of the selected
+            // type — a RevenueCat / Play Console misconfiguration, not a
+            // client bug. Fail soft.
+            toastOnUi("That plan isn't available right now")
+            return
+        }
+        Purchases.sharedInstance.purchaseWith(
+            PurchaseParams.Builder(this, pkg).build(),
+            onError = { error, userCancelled ->
+                if (!userCancelled) {
+                    Log.w(TAG, "purchase failed: $error")
+                    toastOnUi("Purchase didn't complete — you haven't been charged")
+                }
+                // USER_CANCELLED is a deliberate dismissal — no toast noise.
+            },
+            onSuccess = { _, customerInfo -> onPurchaseComplete(customerInfo) },
+        )
     }
 
-    private fun acknowledgeIfNeeded(purchase: Purchase) {
-        if (purchase.isAcknowledged) return
-        val params = AcknowledgePurchaseParams.newBuilder()
-            .setPurchaseToken(purchase.purchaseToken)
-            .build()
-        billingClient.acknowledgePurchase(params) { result ->
-            // Best-effort: the SERVER verdict granted the plan; a failed
-            // acknowledge just means Play redelivers the purchase and we
-            // re-acknowledge on the next listener pass.
-            if (result.responseCode != BillingClient.BillingResponseCode.OK) {
-                Log.w(TAG, "acknowledgePurchase failed (code ${result.responseCode})")
-            }
+    private fun onPurchaseComplete(customerInfo: CustomerInfo) {
+        if (grantsPro(customerInfo.entitlements.active.keys)) {
+            // RevenueCat has already validated + acknowledged the purchase
+            // with Play. Cache the plan for instant UI; the server plan
+            // flips authoritatively via the RevenueCat webhook.
+            cachePlan("pro")
+            toastOnUi("Premium active — welcome aboard")
+            finish()
+        } else {
+            // Purchased, but the "pro" entitlement isn't active yet — rare
+            // (e.g. a pending / deferred purchase awaiting settlement).
+            // Leave the paywall open; it unlocks when the entitlement lands.
+            Log.w(TAG, "purchase succeeded but $PRO_ENTITLEMENT entitlement not active")
+            toastOnUi("Purchase received — Premium will unlock once it clears")
         }
     }
 
@@ -341,55 +290,48 @@ class PaywallActivity : AppCompatActivity() {
      */
     data class Feature(val text: String, val free: String? = null)
 
-    /** Terminal decision after a server verify — see [verifyOutcome]. */
-    enum class VerifyOutcome { PRO_ACTIVATED, KEEP_PAYWALL }
-
     companion object {
         private const val TAG = "PaywallActivity"
 
         /**
          * SharedPreferences key (in [MainActivity.PREFS_NAME]) caching
          * the last server-confirmed plan ("free" / "pro").  Written by
-         * this activity after a verified purchase; read by the limit /
-         * upgrade UI (client-reaction follow-up).  A UI cache only —
-         * the server re-decides entitlement on every metered call.
+         * this activity after a successful purchase; read by the limit /
+         * upgrade UI.  A UI cache only — the server re-decides entitlement
+         * on every metered call.
          */
         const val PREF_PLAYER_PLAN = "player_plan"
 
         /**
-         * Paywall plan key → Play Console product id.  Must stay in
-         * lock-step with the server's `KNOWN_PRODUCTS` in
-         * `llm/seca/billing/router.py` (both products grant plan "pro")
-         * and with the products configured in the Play Console.
+         * The RevenueCat entitlement identifier that unlocks Pro.  Must
+         * match the entitlement configured in the RevenueCat dashboard AND
+         * the server webhook's `PRO_ENTITLEMENT`
+         * (`llm/seca/billing/router.py`) — a drift here would let a
+         * purchase succeed on-device while the server never grants Pro.
          */
-        val PLAY_PRODUCT_IDS: Map<String, String> = mapOf(
-            "monthly" to "pro_monthly",
-            "yearly" to "pro_yearly",
-        )
+        const val PRO_ENTITLEMENT = "pro"
 
         /**
-         * The Play product to purchase for a paywall plan key.  Unknown
-         * keys fall back to the monthly product — defensive only; the
-         * activity's click listeners can only produce catalogue keys
-         * (pinned by [PaywallActivityTest]).
+         * Paywall plan key → RevenueCat package type.  The concrete Play
+         * product (`pro_monthly` / `pro_yearly`) is attached to each
+         * package in the RevenueCat dashboard, not chosen here.  Unknown
+         * keys fall back to MONTHLY — defensive only; the activity's click
+         * listeners can only produce catalogue keys (pinned by
+         * [PaywallActivityTest]).
          */
-        fun productIdFor(planKey: String): String =
-            PLAY_PRODUCT_IDS[planKey] ?: PLAY_PRODUCT_IDS.getValue("monthly")
+        fun packageTypeFor(planKey: String): PackageType = when (planKey) {
+            "yearly" -> PackageType.ANNUAL
+            "monthly" -> PackageType.MONTHLY
+            else -> PackageType.MONTHLY
+        }
 
         /**
-         * Decide the paywall's terminal state from a verify response.
-         * ONLY an [ApiResult.Success] whose body says `plan == "pro"`
-         * activates — every error (402 not entitled, 502/503 upstream,
-         * network, timeout) and every non-pro body keeps the paywall
-         * open and the purchase unacknowledged.  Static + framework-free
-         * so the host-JVM test suite pins the transition table.
+         * Whether a customer's ACTIVE entitlement ids grant Pro.  Pure over
+         * the id set so the host-JVM test can pin the rule without building
+         * a RevenueCat `CustomerInfo`.
          */
-        fun verifyOutcome(result: ApiResult<BillingVerifyResponse>): VerifyOutcome =
-            if (result is ApiResult.Success && result.data.plan == "pro") {
-                VerifyOutcome.PRO_ACTIVATED
-            } else {
-                VerifyOutcome.KEEP_PAYWALL
-            }
+        fun grantsPro(activeEntitlementIds: Set<String>): Boolean =
+            PRO_ENTITLEMENT in activeEntitlementIds
 
         /**
          * Canonical plan-tile copy, bound to the tiles in [onCreate].
@@ -402,9 +344,9 @@ class PaywallActivity : AppCompatActivity() {
          * a fully-coached game ≈ $0.0033 in DeepSeek tokens, so a
          * heavy Pro user costs well under €1/month (≥95% gross margin
          * after ~20% VAT + Play's 15% fee).  These labels are DISPLAY
-         * copy: what gets billed is the Play Console product behind
-         * [PLAY_PRODUCT_IDS] — change both together, and let Play's
-         * per-country price templates localise the actual charge.
+         * copy: what gets billed is the Play product attached to the
+         * selected RevenueCat package — change both together, and let
+         * Play's per-country price templates localise the actual charge.
          */
         val DEFAULT_PLANS: List<Plan> = listOf(
             Plan(

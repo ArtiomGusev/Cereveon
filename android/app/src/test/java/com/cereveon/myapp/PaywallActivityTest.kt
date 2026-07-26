@@ -1,6 +1,8 @@
 package com.cereveon.myapp
 
+import com.revenuecat.purchases.PackageType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -136,81 +138,66 @@ class PaywallActivityTest {
         assertEquals("yearly", PaywallActivity.recommendedPlanKey(emptyList()))
     }
 
-    // ── Play Billing wiring (Subtask 6) ──────────────────────────────
+    // ── RevenueCat wiring ────────────────────────────────────────────
 
     @Test
-    fun `PLAY_PRODUCT_IDS covers exactly the plan catalogue keys`() {
-        // Every selectable tile must map to a purchasable Play product,
-        // and no orphan product mappings may accumulate.
-        assertEquals(
-            PaywallActivity.DEFAULT_PLANS.map { it.key }.toSet(),
-            PaywallActivity.PLAY_PRODUCT_IDS.keys,
-        )
+    fun `packageTypeFor maps plan keys to RevenueCat package types`() {
+        // The tap → selectPlan() keys must resolve to the standard
+        // subscription package types RevenueCat exposes on the offering;
+        // startPurchase() picks the offering package whose packageType
+        // equals this.
+        assertEquals(PackageType.MONTHLY, PaywallActivity.packageTypeFor("monthly"))
+        assertEquals(PackageType.ANNUAL, PaywallActivity.packageTypeFor("yearly"))
     }
 
     @Test
-    fun `productIdFor maps plan keys to the server's known products`() {
-        // Lock-step with KNOWN_PRODUCTS in llm/seca/billing/router.py —
-        // a drifted id would 400 at verify and strand the purchase.
-        assertEquals("pro_monthly", PaywallActivity.productIdFor("monthly"))
-        assertEquals("pro_yearly", PaywallActivity.productIdFor("yearly"))
+    fun `packageTypeFor falls back to MONTHLY for unknown keys`() {
+        // Defensive only — the click listeners can only emit catalogue
+        // keys, but an unknown key must still resolve to a real package
+        // type (never UNKNOWN) so the purchase can proceed.
+        assertEquals(PackageType.MONTHLY, PaywallActivity.packageTypeFor("lifetime"))
+        assertEquals(PackageType.MONTHLY, PaywallActivity.packageTypeFor(""))
     }
 
     @Test
-    fun `productIdFor falls back to the monthly product for unknown keys`() {
-        assertEquals("pro_monthly", PaywallActivity.productIdFor("lifetime"))
-        assertEquals("pro_monthly", PaywallActivity.productIdFor(""))
-    }
-
-    @Test
-    fun `verifyOutcome activates ONLY on Success with plan pro`() {
-        assertEquals(
-            PaywallActivity.VerifyOutcome.PRO_ACTIVATED,
-            PaywallActivity.verifyOutcome(
-                ApiResult.Success(
-                    BillingVerifyResponse(
-                        plan = "pro",
-                        productId = "pro_monthly",
-                        state = "SUBSCRIPTION_STATE_ACTIVE",
-                    ),
-                ),
-            ),
-        )
-    }
-
-    @Test
-    fun `verifyOutcome keeps the paywall for a non-pro success body`() {
-        // Defensive: the server never returns 200 with a non-pro plan
-        // today, but a future plan tier must not accidentally activate
-        // the Pro UI path.
-        assertEquals(
-            PaywallActivity.VerifyOutcome.KEEP_PAYWALL,
-            PaywallActivity.verifyOutcome(
-                ApiResult.Success(BillingVerifyResponse(plan = "free")),
-            ),
-        )
-    }
-
-    @Test
-    fun `verifyOutcome keeps the paywall on every failure result`() {
-        // 402 = Google says not entitled; 502/503 = server can't verify
-        // right now; network/timeout = transport.  ALL of them must keep
-        // the paywall open and (in the activity) the purchase
-        // unacknowledged so Play's auto-refund safety net applies.
-        val failures = listOf(
-            ApiResult.HttpError(402),
-            ApiResult.HttpError(502),
-            ApiResult.HttpError(503),
-            ApiResult.NetworkError(RuntimeException("dns")),
-            ApiResult.Timeout,
-        )
-        for (failure in failures) {
-            assertEquals(
-                "result $failure must not activate Pro",
-                PaywallActivity.VerifyOutcome.KEEP_PAYWALL,
-                PaywallActivity.verifyOutcome(failure),
+    fun `packageTypeFor resolves every plan catalogue key to a real type`() {
+        // Every selectable tile must map to a concrete RevenueCat package
+        // type; a key that resolved to UNKNOWN would strand the purchase.
+        for (plan in PaywallActivity.DEFAULT_PLANS) {
+            val type = PaywallActivity.packageTypeFor(plan.key)
+            assertTrue(
+                "plan ${plan.key} must resolve to MONTHLY or ANNUAL, got $type",
+                type == PackageType.MONTHLY || type == PackageType.ANNUAL,
             )
         }
+    }
+
+    @Test
+    fun `PRO_ENTITLEMENT matches the server and dashboard entitlement id`() {
+        // Lock-step with PRO_ENTITLEMENT in llm/seca/billing/router.py and
+        // the entitlement configured in the RevenueCat dashboard — a drift
+        // lets a purchase succeed on-device while the server never grants
+        // Pro (the webhook's _event_mentions_pro would ignore it).
+        assertEquals("pro", PaywallActivity.PRO_ENTITLEMENT)
+    }
+
+    @Test
+    fun `grantsPro is true only when pro is among the active entitlements`() {
+        // The activity activates Pro from customerInfo.entitlements.active
+        // — only an ACTIVE "pro" entitlement counts.
+        assertTrue(PaywallActivity.grantsPro(setOf("pro")))
+        assertTrue(
+            "extra active entitlements alongside pro still grant Pro",
+            PaywallActivity.grantsPro(setOf("pro", "some_other")),
+        )
+        assertFalse(
+            "a different entitlement must not activate Pro",
+            PaywallActivity.grantsPro(setOf("some_other")),
+        )
+        assertFalse(
+            "no active entitlements must not activate Pro",
+            PaywallActivity.grantsPro(emptySet()),
+        )
     }
 
     @Test

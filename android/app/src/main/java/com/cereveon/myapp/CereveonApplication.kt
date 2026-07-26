@@ -3,6 +3,9 @@ package com.cereveon.myapp
 import android.app.Application
 import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
+import com.revenuecat.purchases.LogLevel
+import com.revenuecat.purchases.Purchases
+import com.revenuecat.purchases.PurchasesConfiguration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -56,7 +59,34 @@ class CereveonApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         applyPersistedAppearance()
+        configureRevenueCat()
         prewarmEncryptedTokenStorage()
+    }
+
+    /**
+     * Configure the RevenueCat billing SDK once per process, before any
+     * activity can reach the paywall.
+     *
+     * Configured ANONYMOUSLY here (no app_user_id) so cold start never
+     * blocks on the Keystore-backed token read.  [PaywallActivity] pins the
+     * RevenueCat identity to the server player id (`logIn`) right before a
+     * purchase — the only moment the webhook's `app_user_id` → player
+     * mapping needs to be correct.
+     *
+     * Guarded on a non-blank key: dev / CI builds ship
+     * `BuildConfig.REVENUECAT_API_KEY = ""` (see build.gradle.kts) and
+     * `Purchases.configure` rejects a blank key, so we skip configuration
+     * and the paywall degrades to "billing unavailable" instead of crashing
+     * at startup.
+     */
+    private fun configureRevenueCat() {
+        val apiKey = BuildConfig.REVENUECAT_API_KEY
+        if (apiKey.isBlank()) {
+            Log.i("CereveonApplication", "RevenueCat key absent — billing disabled for this build")
+            return
+        }
+        Purchases.logLevel = if (BuildConfig.DEBUG) LogLevel.DEBUG else LogLevel.WARN
+        Purchases.configure(PurchasesConfiguration.Builder(this, apiKey).build())
     }
 
     /**

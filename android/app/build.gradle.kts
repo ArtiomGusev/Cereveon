@@ -49,6 +49,15 @@ android {
         buildConfigField("String", "COACH_API_BASE", "\"https://cereveon.com\"")
         buildConfigField("String", "COACH_API_KEY", "\"dev-key\"")
 
+        // RevenueCat public SDK key (goog_…) — the app's billing source of
+        // truth.  Publishable by design (safe in the decompiled APK), so it
+        // is a plain configuration value like COACH_API_BASE, injected from
+        // the REVENUECAT_API_KEY env var by the build-type blocks below.
+        // Defaults to blank: an unset key leaves the SDK unconfigured and the
+        // paywall shows "billing unavailable" rather than crashing — dev / CI
+        // builds don't need a real key.
+        buildConfigField("String", "REVENUECAT_API_KEY", "\"\"")
+
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
@@ -115,6 +124,11 @@ android {
             }
             buildConfigField("String", "COACH_API_BASE", "\"$prodApiBase\"")
             buildConfigField("String", "COACH_API_KEY", "\"$prodApiKey\"")
+            // Public RevenueCat key (see defaultConfig note). Blank when the
+            // env var is unset → SDK stays unconfigured, paywall degrades to
+            // "billing unavailable". Pass as a GitHub Actions variable.
+            val prodRevenueCatKey: String = System.getenv("REVENUECAT_API_KEY")?.takeIf { it.isNotBlank() } ?: ""
+            buildConfigField("String", "REVENUECAT_API_KEY", "\"$prodRevenueCatKey\"")
         }
         debug {
             // Allow developers to point at a remote server (e.g. Hetzner) without
@@ -124,6 +138,8 @@ android {
             val debugApiKey: String = System.getenv("COACH_API_KEY") ?: "dev-key"
             buildConfigField("String", "COACH_API_BASE", "\"$debugApiBase\"")
             buildConfigField("String", "COACH_API_KEY", "\"$debugApiKey\"")
+            val debugRevenueCatKey: String = System.getenv("REVENUECAT_API_KEY") ?: ""
+            buildConfigField("String", "REVENUECAT_API_KEY", "\"$debugRevenueCatKey\"")
         }
     }
 
@@ -153,10 +169,14 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.12.2")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation(libs.kotlinx.serialization.json)
-    // Google Play Billing — paywall purchase flow (PaywallActivity).
-    // Entitlement still comes from the SERVER (/billing/google/verify);
-    // the library only produces the purchase token we send there.
-    implementation("com.android.billingclient:billing-ktx:7.1.1")
+    // RevenueCat — the app's billing SDK (PaywallActivity purchase flow).
+    // RevenueCat validates receipts with Play and acknowledges the purchase;
+    // a successful purchase activates the "pro" entitlement, and RevenueCat's
+    // webhook (POST /billing/revenuecat/webhook) flips the server-side plan.
+    // Brings its own Play Billing client transitively, so we no longer depend
+    // on com.android.billingclient directly (avoids a duplicate/conflicting
+    // billing-client version).
+    implementation("com.revenuecat.purchases:purchases:10.15.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")

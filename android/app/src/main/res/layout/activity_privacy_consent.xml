@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Cereveon · Atrium · Privacy consent gate.
+
+    Shown once, right after sign-up (and to any authenticated user who
+    has not yet accepted the current policy version), BEFORE onboarding.
+    The user must open + acknowledge the Privacy Policy to continue —
+    Continue stays disabled until the "I agree" box is checked.
+
+    Top → bottom:
+      1.  Centered cyan kicker "CEREVEON · PRIVACY"
+      2.  Italic display title "Before you start."
+      3.  Italic muted subtitle (what the policy covers)
+      4.  ✦ ornament rule
+      5.  Tappable "Read our Privacy Policy" link (opens the hosted page)
+      6.  "I agree" checkbox
+      7.  Footer — primary "Continue" button (disabled until checked)
+
+    No Back path into the app: the gate is launched as the task root
+    (CLEAR_TASK), so Back exits the app and the next launch re-shows the
+    gate until consent is recorded — it cannot be bypassed.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_atrium_gradient"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingStart="@dimen/atrium_space_24"
+        android:paddingEnd="@dimen/atrium_space_24"
+        android:paddingTop="@dimen/atrium_space_44"
+        android:paddingBottom="@dimen/atrium_space_24">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/atrium_space_32"
+            android:textAppearance="@style/Atrium.Kicker.Cyan"
+            android:text="Cereveon · Privacy" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/atrium_space_12"
+            android:fontFamily="@font/cormorant_garamond"
+            android:textStyle="italic"
+            android:textColor="@color/atrium_ink"
+            android:textSize="36sp"
+            android:lineSpacingMultiplier="1.05"
+            android:gravity="center_horizontal"
+            android:text="Before you start." />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/atrium_space_12"
+            android:fontFamily="@font/cormorant_garamond"
+            android:textStyle="italic"
+            android:textColor="@color/atrium_muted"
+            android:textSize="16sp"
+            android:lineSpacingMultiplier="1.4"
+            android:gravity="center_horizontal"
+            android:maxWidth="320dp"
+            android:text="Our Privacy Policy explains what Cereveon collects — your account, your games, and your coaching — and how it is used and protected. Please review it before continuing." />
+
+        <!-- ✦ ornament rule. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/atrium_space_24"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="@dimen/atrium_hairline_thickness"
+                android:layout_weight="1"
+                android:background="@color/atrium_hairline_strong" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/atrium_space_8"
+                android:layout_marginEnd="@dimen/atrium_space_8"
+                android:fontFamily="@font/cormorant_garamond"
+                android:textColor="@color/atrium_muted"
+                android:textSize="14sp"
+                android:text="✦" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="@dimen/atrium_hairline_thickness"
+                android:layout_weight="1"
+                android:background="@color/atrium_hairline_strong" />
+
+        </LinearLayout>
+
+        <!-- Tappable link → opens the hosted policy in the system browser. -->
+        <TextView
+            android:id="@+id/privacyPolicyLink"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/atrium_space_24"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:minHeight="@dimen/atrium_tap_target"
+            android:gravity="center"
+            android:paddingStart="@dimen/atrium_space_12"
+            android:paddingEnd="@dimen/atrium_space_12"
+            android:textColor="@color/atrium_accent_cyan"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:text="Read our Privacy Policy →" />
+
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/privacyConsentCheckbox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/atrium_space_16"
+            android:minHeight="@dimen/atrium_tap_target"
+            android:textColor="@color/atrium_ink"
+            android:textSize="15sp"
+            app:buttonTint="@color/atrium_accent_cyan"
+            android:text="I have read and agree to the Privacy Policy" />
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/atrium_space_24" />
+
+        <Button
+            android:id="@+id/btnPrivacyConsentContinue"
+            style="@style/Atrium.Button.Primary"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/atrium_tap_target"
+            android:layout_marginTop="@dimen/atrium_space_16"
+            android:enabled="false"
+            android:text="Continue" />
+
+    </LinearLayout>
+
+</ScrollView>

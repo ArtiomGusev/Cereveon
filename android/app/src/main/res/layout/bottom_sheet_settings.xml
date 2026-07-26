@@ -474,6 +474,25 @@
 
         </LinearLayout>
 
+        <!-- Opens the hosted Privacy Policy (GET /privacy) in the browser —
+             the same page linked from the sign-up consent gate.  Passive /
+             informational, so default row colours. -->
+        <LinearLayout
+            android:id="@+id/rowPrivacyPolicy"
+            style="@style/Atrium.SettingsRow.Trailing">
+
+            <TextView
+                style="@style/Atrium.SettingsRow.Title"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:text="Privacy Policy" />
+
+            <TextView
+                style="@style/Atrium.SettingsRow.Chevron"
+                android:text="›" />
+
+        </LinearLayout>
+
         <LinearLayout
             android:id="@+id/rowSignOut"
             style="@style/Atrium.SettingsRow.Trailing">

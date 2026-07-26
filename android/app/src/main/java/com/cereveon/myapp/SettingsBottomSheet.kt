@@ -1,8 +1,10 @@
 package com.cereveon.myapp
 
 import android.app.AlertDialog
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -210,6 +212,22 @@ class SettingsBottomSheet : BottomSheetDialogFragment() {
         view.findViewById<View>(R.id.rowDownloadData).setOnClickListener {
             dismiss()
             onDownloadDataTapped?.invoke()
+        }
+        // Privacy Policy: opens the hosted /privacy page (the same URL the
+        // sign-up consent gate links) in the browser.  Self-contained — no
+        // host state to thread, so it opens directly rather than via a
+        // callback, and the sheet stays up so the user returns to Settings.
+        view.findViewById<View>(R.id.rowPrivacyPolicy).setOnClickListener {
+            val url = PrivacyConsentActivity.privacyPolicyUrl(BuildConfig.COACH_API_BASE)
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(
+                    requireContext(),
+                    "No browser available to open the policy",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
         }
     }
 

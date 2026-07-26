@@ -36,15 +36,17 @@ this endpoint.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 import os
 import time
 from dataclasses import dataclass
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, field_validator
 
+from llm.seca.auth.models import Player
 from llm.seca.auth.router import get_current_player, get_db
 from llm.seca.entitlements import service as entitlements
 from llm.seca.shared_limiter import limiter
@@ -272,3 +274,150 @@ async def verify_google_purchase(
         verdict.state,
     )
     return {"plan": plan, "product_id": req.product_id, "state": verdict.state}
+
+
+# ---------------------------------------------------------------------------
+# RevenueCat webhook — the production subscription source of truth
+# ---------------------------------------------------------------------------
+#
+# The app purchases through the RevenueCat SDK (not raw Play Billing), and
+# RevenueCat validates receipts with the stores.  It then POSTs lifecycle
+# events here, which flip ``Player.plan`` so the server-side entitlements
+# enforcement stays authoritative — a modified client cannot fake pro, and
+# downgrade-on-expiry is handled automatically (no RTDN wiring needed).
+#
+# This SUPERSEDES ``POST /billing/google/verify`` above (direct
+# purchase-token verification): with RevenueCat the Play service-account
+# key lives in the RevenueCat dashboard, not this server's env.  The
+# verify endpoint is kept for back-compat / non-RevenueCat clients but is
+# no longer the live path.
+
+#: The RevenueCat entitlement identifier that grants the pro plan.  Must
+#: match the entitlement configured in the RevenueCat dashboard.
+PRO_ENTITLEMENT = "pro"
+
+#: RevenueCat event types that mean the pro entitlement is now ACTIVE.
+_RC_GRANT_EVENTS = frozenset(
+    {
+        "INITIAL_PURCHASE",
+        "RENEWAL",
+        "UNCANCELLATION",
+        "PRODUCT_CHANGE",
+        "NON_RENEWING_PURCHASE",
+        "SUBSCRIPTION_EXTENDED",
+    }
+)
+#: Event types that mean it ENDED.  ``CANCELLATION`` is deliberately NOT
+#: here — it only turns off auto-renew; access holds until ``EXPIRATION``.
+#: ``BILLING_ISSUE`` (grace period) and ``SUBSCRIPTION_PAUSED`` also keep
+#: the plan and self-correct via a later EXPIRATION if never resolved.
+_RC_REVOKE_EVENTS = frozenset({"EXPIRATION"})
+
+
+class RevenueCatEvent(BaseModel):
+    """The ``event`` object of a RevenueCat webhook (fields we use)."""
+
+    type: str = ""
+    app_user_id: str = ""
+    entitlement_ids: list[str] | None = None
+    entitlement_id: str | None = None  # legacy singular form
+    environment: str = ""
+    store: str = ""
+
+
+class RevenueCatWebhook(BaseModel):
+    """RevenueCat webhook envelope."""
+
+    event: RevenueCatEvent
+    api_version: str = ""
+
+
+def _event_mentions_pro(ev: RevenueCatEvent) -> bool:
+    """Whether the event concerns the pro entitlement.
+
+    Uses ``entitlement_ids`` (or the legacy singular ``entitlement_id``).
+    When the event carries no entitlement info (some types omit it),
+    treat it as relevant — this app has a single entitlement.
+    """
+    ids = ev.entitlement_ids
+    if ids is None:
+        ids = [] if ev.entitlement_id is None else [ev.entitlement_id]
+    return not ids or PRO_ENTITLEMENT in ids
+
+
+@router.post("/revenuecat/webhook")
+@limiter.limit("120/minute")
+async def revenuecat_webhook(
+    body: RevenueCatWebhook,
+    request: Request,
+    authorization: str = Header(default=""),
+    db=Depends(get_db),
+):
+    """RevenueCat webhook — authoritative subscription-state updates.
+
+    RevenueCat POSTs purchase / renewal / expiry / cancellation events.
+    We verify the shared-secret ``Authorization`` header (configured in
+    the RevenueCat dashboard AND in ``REVENUECAT_WEBHOOK_AUTH``), map
+    ``event.app_user_id`` — which the app sets to the server player id —
+    to the player, and flip ``Player.plan`` via ``entitlements.set_plan``.
+
+    Auth posture: ``REVENUECAT_WEBHOOK_AUTH`` unset → 503 (fail closed);
+    header mismatch/absent → 401.  set_plan is independent of
+    ``SECA_ENTITLEMENTS_ENFORCED`` — the plan column always tracks
+    reality so enforcement (whenever on) sees the right tier.
+
+    Returns 200 for any authenticated, well-formed event — including
+    no-op event types and unmatched players — so RevenueCat does not
+    retry a permanent condition.  Only a DB write failure returns 500,
+    which RevenueCat will retry.
+    """
+    secret = os.getenv("REVENUECAT_WEBHOOK_AUTH", "").strip()
+    if not secret:
+        raise HTTPException(status_code=503, detail="revenuecat webhook not configured")
+    # Constant-time compare so a mismatch can't be timed byte-by-byte.
+    if not hmac.compare_digest(authorization, secret):
+        raise HTTPException(status_code=401, detail="invalid webhook authorization")
+
+    ev = body.event
+    etype = ev.type.upper()
+
+    if etype in _RC_GRANT_EVENTS and _event_mentions_pro(ev):
+        target = entitlements.PLAN_PRO
+    elif etype in _RC_REVOKE_EVENTS and _event_mentions_pro(ev):
+        target = entitlements.PLAN_FREE
+    else:
+        logger.info("revenuecat webhook: no-op (type=%s)", etype)
+        return {"status": "ok", "action": "ignored", "type": etype}
+
+    uid = ev.app_user_id.strip()
+    if not uid or uid.startswith("$RCAnonymousID:"):
+        # The SDK fired an event before it was configured with the player
+        # id.  Nothing to map — the identified alias event that follows
+        # will carry the real id.
+        logger.warning("revenuecat webhook: unmappable app_user_id (type=%s)", etype)
+        return {"status": "ok", "action": "skipped_anonymous"}
+
+    player = db.query(Player).filter(Player.id == uid).one_or_none()
+    if player is None:
+        logger.warning("revenuecat webhook: no player for app_user_id=%s (type=%s)", uid[:12], etype)
+        return {"status": "ok", "action": "player_not_found"}
+
+    try:
+        entitlements.set_plan(db, player, target)
+    except Exception as exc:  # noqa: BLE001
+        # Persisting failed — return 500 so RevenueCat retries the event.
+        logger.warning("revenuecat webhook: set_plan failed (%s); will be retried", exc)
+        raise HTTPException(status_code=500, detail="could not persist plan") from exc
+
+    logger.info(
+        "revenuecat webhook: player %s -> %s (type=%s, env=%s)",
+        uid[:12],
+        target,
+        etype,
+        ev.environment,
+    )
+    return {
+        "status": "ok",
+        "action": "granted" if target == entitlements.PLAN_PRO else "revoked",
+        "plan": target,
+    }

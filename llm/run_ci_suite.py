@@ -54,6 +54,12 @@ TEST_TARGETS = [
     # 500'd — invisible because it wasn't in this list.  Registered +
     # repaired 2026-07-15.
     "llm/tests/test_chat_entitlements_402.py",
+    # RevenueCat webhook — the subscription source of truth: auth
+    # (503 unconfigured / 401 mismatch), grant/revoke event mapping,
+    # CANCELLATION-is-no-op, unknown-player/anonymous robustness, and
+    # idempotency.  Registered on creation so it does NOT join the
+    # silent-skip debt above.
+    "llm/tests/test_revenuecat_webhook.py",
     # Cereveon app-help layer: detector precision/recall, prompt injection
     # wiring, and guide-text safety (no forbidden output / no engine
     # reveal / no unimplemented-feature claims).

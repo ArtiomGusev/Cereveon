@@ -2045,7 +2045,15 @@ in `today_puzzle` (§34), which the sequential + calendar gate controls.
 
 ---
 
-## 36. `POST /billing/google/verify`
+## 36. `POST /billing/google/verify` *(SUPERSEDED by §40 RevenueCat webhook)*
+
+> **Superseded.** With RevenueCat as the subscription source of truth
+> (§40), the app purchases through the RevenueCat SDK and the server
+> learns of entitlement via the webhook — not by verifying raw purchase
+> tokens here. This endpoint is retained for back-compat / non-RevenueCat
+> clients; with RevenueCat the `GOOGLE_PLAY_*` credentials live in the
+> RevenueCat dashboard, so this endpoint's env is unset and it answers
+> `503`.
 
 **Host:** `llm/seca/billing/router.py`
 **Auth:** `Authorization: Bearer <token>` required
@@ -2679,6 +2687,69 @@ The Android surface is the **Report (flag)** icon on each coach message
 in the chat panel (`ChatAdapter` → `ChatBottomSheet.showReportDialog`);
 `ReportContentSourcePinTest` pins that the tap only opens a confirmation
 dialog and the POST fires from its positive button.
+
+---
+
+## 40. `POST /billing/revenuecat/webhook`
+
+**Host:** `llm/seca/billing/router.py`
+**Auth:** shared-secret `Authorization` header (RevenueCat), **not** JWT / X-Api-Key
+**Rate limit:** 120 / minute
+
+The subscription **source of truth**. The app purchases through the
+RevenueCat SDK; RevenueCat validates receipts with the stores and POSTs
+lifecycle events here. The server maps `event.app_user_id` (the app sets
+it to the server **player id**) to the player and flips `Player.plan` via
+`entitlements.set_plan` — keeping enforcement server-authoritative (a
+modified client cannot fake pro) and auto-downgrading on expiry.
+
+### Auth
+
+RevenueCat sends the value configured as the webhook's *Authorization
+header* (dashboard → Integrations → Webhooks) in the `Authorization`
+header. The server compares it (constant-time) to `REVENUECAT_WEBHOOK_AUTH`.
+
+- `503` — `REVENUECAT_WEBHOOK_AUTH` unset (fail closed).
+- `401` — header missing or mismatched. Plan not touched.
+
+### Request body
+
+RevenueCat's webhook envelope; the fields consumed:
+
+```json
+{
+  "api_version": "1.0",
+  "event": {
+    "type": "INITIAL_PURCHASE | RENEWAL | CANCELLATION | EXPIRATION | ...",
+    "app_user_id": "<server player id>",
+    "entitlement_ids": ["pro"],
+    "environment": "PRODUCTION | SANDBOX"
+  }
+}
+```
+
+### Behaviour
+
+| Event type | Action on the `"pro"` entitlement |
+|-----------|-----------------------------------|
+| `INITIAL_PURCHASE`, `RENEWAL`, `UNCANCELLATION`, `PRODUCT_CHANGE`, `NON_RENEWING_PURCHASE`, `SUBSCRIPTION_EXTENDED` | **grant** → `plan = "pro"` |
+| `EXPIRATION` | **revoke** → `plan = "free"` |
+| `CANCELLATION` (auto-renew off, still entitled), `BILLING_ISSUE` (grace), `TEST`, others | **no-op** (200) |
+
+### Response
+
+Always `200` for an authenticated, well-formed event — including no-op
+types, an unmatched `app_user_id` (`{"action": "player_not_found"}`), or
+an anonymous `$RCAnonymousID:` id (`{"action": "skipped_anonymous"}`) — so
+RevenueCat does not retry a permanent condition. Only a DB write failure
+returns `500` (RevenueCat retries). Idempotent: a duplicated grant leaves
+`plan = "pro"`. Independent of `SECA_ENTITLEMENTS_ENFORCED` — the plan
+column always tracks reality so enforcement (whenever on) reads the right
+tier.
+
+```json
+{ "status": "ok", "action": "granted | revoked | ignored | player_not_found | skipped_anonymous", "plan": "pro | free" }
+```
 
 ---
 

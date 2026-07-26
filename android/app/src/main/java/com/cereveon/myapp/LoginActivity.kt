@@ -81,7 +81,7 @@ class LoginActivity : AppCompatActivity() {
         // If already logged in, go straight to the game — avoid showing the
         // login form when the user re-opens the app with a valid session.
         if (authRepository.isLoggedIn()) {
-            launchPostAuth()
+            routeAfterAuth()
             return
         }
 
@@ -147,7 +147,7 @@ class LoginActivity : AppCompatActivity() {
             when (val result = authApiClient.login(email, password)) {
                 is ApiResult.Success -> {
                     authRepository.saveToken(result.data.accessToken)
-                    launchPostAuth()
+                    routeAfterAuth()
                 }
 
                 is ApiResult.HttpError -> {
@@ -179,7 +179,7 @@ class LoginActivity : AppCompatActivity() {
             when (val result = authApiClient.register(email, password)) {
                 is ApiResult.Success -> {
                     authRepository.saveToken(result.data.accessToken)
-                    launchOnboarding()
+                    routeAfterAuth()
                 }
 
                 is ApiResult.HttpError -> {
@@ -291,7 +291,7 @@ class LoginActivity : AppCompatActivity() {
             when (val result = authApiClient.loginWithLichess(code, codeVerifier)) {
                 is ApiResult.Success -> {
                     authRepository.saveToken(result.data.accessToken)
-                    launchPostAuth()
+                    routeAfterAuth()
                 }
 
                 is ApiResult.HttpError -> {
@@ -330,6 +330,31 @@ class LoginActivity : AppCompatActivity() {
         btnLichess.isEnabled = true
         tvError.text = message
         tvError.visibility = View.VISIBLE
+    }
+
+    /**
+     * First hop after ANY successful authentication (register, login,
+     * Lichess, or an already-valid session on cold start): force the
+     * privacy consent gate if this device hasn't accepted the current
+     * policy version, otherwise fall through to the normal
+     * onboarding-or-home routing.
+     *
+     * Gating on every authenticated entry — not only after registration —
+     * makes consent unskippable: a user who kills the app while the gate
+     * is up returns to [LoginActivity] still logged in, and this bounces
+     * them straight back to the gate.  [PrivacyConsentActivity] records
+     * consent and then routes onward the same way [launchPostAuth] would.
+     */
+    private fun routeAfterAuth() {
+        if (PrivacyConsentActivity.isAccepted(this)) {
+            launchPostAuth()
+        } else {
+            startActivity(
+                Intent(this, PrivacyConsentActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+            )
+            finish()
+        }
     }
 
     /**

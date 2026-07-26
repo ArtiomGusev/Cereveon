@@ -58,6 +58,12 @@
             </intent-filter>
         </activity>
 
+        <!-- Privacy consent gate — shown after sign-up (and to any
+             not-yet-consented user) before onboarding. -->
+        <activity
+            android:name=".PrivacyConsentActivity"
+            android:exported="false" />
+
         <activity
             android:name=".OnboardingWelcomeActivity"
             android:exported="false" />

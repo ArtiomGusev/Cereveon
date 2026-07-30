@@ -718,7 +718,14 @@ jobs:
               # ``up -d caddy`` recreates caddy when its compose config changed
               # (adding the ./site:/srv mount does) and is a no-op otherwise, so
               # it will not blip ingress on ordinary api-only deploys.
-              docker compose -f docker-compose.prod.yml up -d caddy || true
+              #
+              # ``--no-deps`` is REQUIRED: caddy ``depends_on`` api, so without
+              # it ``compose up caddy`` also reconciles api and tries to pull the
+              # private GHCR api image -- which fails with "error from registry:
+              # denied" and silently aborts the caddy recreate (landing page then
+              # never goes live).  --no-deps limits the action to caddy, whose
+              # public image is already present locally.
+              docker compose -f docker-compose.prod.yml up -d --no-deps caddy || true
               # Prune stale unused images.  Without this, every merge to main
               # leaves prior cereveon-llm-api digests on disk; on the 38 GB
               # Hetzner box the / volume fills after ~30-50 merges and the

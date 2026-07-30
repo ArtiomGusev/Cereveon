@@ -335,6 +335,66 @@
   </div>
   <p style="color:var(--faint);font-size:12px;line-height:1.65;margin:11px 2px 0">Blended ≈ <b style="color:var(--muted)">€0.010/user/mo</b> (~3 games + 10 chats) — most signups are light or dormant, so the mean sits below the engaged "realistic" figure in the Free panel. Cost treats every user as free (conservative); converted users bring €7.08 net each and more than pay their own slightly-higher token cost.</p>
 
+  <!-- INFERENCE LEVER: MANAGED API vs SELF-HOSTED OPEN WEIGHTS -->
+  <p class="sec-label">The inference lever — managed API vs open weights on owned hardware <span class="tag model">modeled</span></p>
+  <div class="tiers">
+    <div class="tier">
+      <div class="head">
+        <div class="name"><h3>Managed API</h3><div class="price">DeepSeek · <b>today</b></div></div>
+        <ul class="limits">
+          <li><b>Pure variable cost</b> — scales 1:1 with tokens ($0.14 / $0.28 per M)</li>
+          <li><b>Zero capex, zero ops</b> — elastic, nothing to run or maintain</li>
+          <li>Already 95%+ Premium margin — the right call at today's scale</li>
+        </ul>
+      </div>
+      <div style="padding:14px 20px;font-family:var(--mono);font-size:12.5px;color:var(--muted)">≈ <b style="color:var(--ink);font-weight:400">€0.010</b> / user·mo &nbsp;·&nbsp; grows <b style="color:var(--ink);font-weight:400">linearly</b></div>
+    </div>
+    <div class="tier premium">
+      <div class="head">
+        <div class="name"><h3>Self-hosted open weights</h3><div class="price">owned GPU · <b>the lever</b></div></div>
+        <ul class="limits">
+          <li><b>~Zero marginal cost / token</b> — inference becomes just electricity</li>
+          <li><b>Flat, capped per GPU</b> — immune to any API price hike</li>
+          <li>The engine supplies the chess truth, so a smaller open model carries the explanation</li>
+        </ul>
+      </div>
+      <div style="padding:14px 20px;font-family:var(--mono);font-size:12.5px;color:var(--muted)">≈ <b style="color:var(--ink);font-weight:400">€30–90</b> / GPU·mo &nbsp;·&nbsp; stays <b style="color:var(--gold);font-weight:400">flat</b></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="scroll">
+      <table class="biz">
+        <thead>
+          <tr><th>Monthly LLM spend</th><th>Managed API</th><th>Self-hosted · owned GPU</th><th>vs API</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><b>1,000 users</b></td><td class="num">€10</td><td class="num">~€30 flat</td><td class="num"><span class="pill warn">API cheaper</span></td></tr>
+          <tr><td><b>10,000 users</b></td><td class="num">€100</td><td class="num">~€40</td><td class="num"><span class="pill good">~2.5×</span></td></tr>
+          <tr><td><b>100,000 users</b></td><td class="num">€1,000</td><td class="num">~€120</td><td class="num"><span class="pill good">~8×</span></td></tr>
+          <tr><td><b>1,000,000 users</b></td><td class="num">€10,000</td><td class="num">~€400</td><td class="num"><span class="pill good">~25×</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="callouts">
+    <div class="call">
+      <div class="n">~3–4k</div>
+      <div class="t">engaged users is the <b>crossover</b> — beyond it, owned inference beats the API</div>
+    </div>
+    <div class="call">
+      <div class="n">€0<span style="font-size:14px;color:var(--muted)">/tok</span></div>
+      <div class="t">marginal cost once the hardware is yours — the <b>"DeepSeek 2×"</b> risk disappears</div>
+    </div>
+    <div class="call">
+      <div class="n">flat</div>
+      <div class="t">self-hosted cost stays capped per GPU while API spend grows <b>linearly</b> with users</div>
+    </div>
+  </div>
+
+  <p style="color:var(--faint);font-size:12px;line-height:1.65;margin:11px 2px 34px">Today the managed API is the right call — cheapest at current scale, elastic, zero-ops. Open weights are a <b style="color:var(--muted)">margin lever for scale</b> (and a hedge if API prices rise): the owner already holds the GPU hardware, so the capex is sunk and self-hosting cost is effectively electricity. The trade-offs are real — it adds ops/maintenance, needs a one-time quality-validation pass on the chosen open model, and each GPU has a concurrency ceiling — so it's a switch to flip deliberately at scale, not on day one. Figures are modeled to show the flat-vs-linear shape, not a benchmark.</p>
+
   <!-- ASSUMPTIONS -->
   <div class="assume">
     <p class="sec-label" style="margin-bottom:12px">Assumptions &amp; provenance</p>
@@ -344,6 +404,7 @@
       <li><b>Revenue net:</b> €9.99 → −20% VAT → −15% Play fee = <code>€7.08</code>/mo. Annual €71.99 → ≈€51/yr = <code>€4.25</code>/mo net. Costs converted at ~$1 = €0.92.</li>
       <li><b>Modeled usage:</b> the Free panel's "realistic" row (8 games + 25 chats/mo) is an <b>engaged</b> user; the at-scale table uses a lower <b>blended</b> average (~3 games + 10 chats/mo ≈ €0.010/user) because most signups are light or dormant. Typical Premium = 2 games + 8 chats/day. Ceilings are every daily cap hit for 30 days — a pathological user no real account reaches.</li>
       <li><b>Not a cost, a capacity limit:</b> Stockfish CPU is ~€0.000007/game. The 2-vCPU box caps at ~50–100 concurrently active players before eval queueing, well before tokens become the constraint. AI opponent runs on-device (zero server cost).</li>
+      <li><b>Self-hosted (modeled scenario):</b> assumes an open-weight model matching the current grounded-explanation quality — the engine supplies the chess truth, so the model can be smaller — served on GPU hardware the owner already holds (capex sunk; run-cost ≈ electricity at ~€0.30/kWh, one GPU averaging ~150–400 W ≈ €30–90/mo by load). Per-GPU concurrency is finite, so scale adds GPUs step-wise. The Managed-API column extends the measured at-scale figures linearly; the self-hosted column is illustrative of the flat-vs-linear shape, not a measured benchmark, and a one-time quality-validation pass on the chosen model is required before switching.</li>
     </ol>
     <div class="foot">
       <span>Cereveon · freemium cost model</span>

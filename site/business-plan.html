@@ -6,42 +6,52 @@
 <title>Cereveon — Unit Economics &amp; Cost Model</title>
 <meta name="description" content="Cereveon cost-to-serve and unit economics: measured token/compute costs, Free vs Premium tiers, Premium margins (95–97%), and at-scale break-even.">
 <meta name="theme-color" content="#F4F1E9" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0B0E13" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#14120f" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex, nofollow">
 <style>
+  @font-face { font-family: "Cormorant Garamond"; src: url("fonts/CormorantGaramond-Medium.ttf") format("truetype"); font-weight: 500; font-style: normal; font-display: swap; }
+  @font-face { font-family: "Cormorant Garamond"; src: url("fonts/CormorantGaramond-Italic.ttf") format("truetype"); font-weight: 500; font-style: italic; font-display: swap; }
+  @font-face { font-family: "Inter"; src: url("fonts/Inter-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: "Inter"; src: url("fonts/Inter-Medium.ttf") format("truetype"); font-weight: 500; font-style: normal; font-display: swap; }
+  @font-face { font-family: "JetBrains Mono"; src: url("fonts/JetBrainsMono-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+
+  /* Cereveon landing-page brand: parchment ground, ink text, ember accent,
+     warm gold for the Premium tier. Cormorant Garamond / Inter / JetBrains
+     Mono served same-origin (/fonts). Light default; dark via prefers +
+     [data-theme] overrides, mirroring the landing page. */
   :root{
     color-scheme:light dark;
-    --ground:#0B0E13; --surface:#141A23; --surface-2:#1B222D; --hairline:#263041;
-    --ink:#ECE7DB; --muted:#8B95A6; --faint:#5D6675;
-    --cyan:#5BD2DE; --cyan-dim:#367f88; --gold:#D8A44A;
-    --good:#63BE8E; --warn:#E0A83E; --bad:#E07A6B;
-    --shadow:0 1px 0 rgba(255,255,255,.03), 0 18px 40px -24px rgba(0,0,0,.7);
-    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
-    --mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Consolas,monospace;
+    --ground:#f4f1ea; --surface:#fcfbf7; --surface-2:#efe9dc; --hairline:#ddd6c8;
+    --ink:#23201b; --muted:#4c453a; --faint:#857a67;
+    --cyan:#b5540d; --cyan-dim:#c07a3d; --gold:#9c6e1a;
+    --good:#5f7a4f; --warn:#b07d1a; --bad:#b4503e;
+    --shadow:0 1px 2px rgba(35,32,27,.06), 0 16px 34px -22px rgba(35,32,27,.22);
+    --sans:"Inter",-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --serif:"Cormorant Garamond",Georgia,"Iowan Old Style","Times New Roman",serif;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace;
   }
-  @media (prefers-color-scheme: light){
+  @media (prefers-color-scheme: dark){
     :root{
-      --ground:#F4F1E9; --surface:#FFFFFF; --surface-2:#EFEBE0; --hairline:#DED8C9;
-      --ink:#1A1E24; --muted:#5B6472; --faint:#93998f;
-      --cyan:#0C7A86; --cyan-dim:#5aa7ae; --gold:#9C6E1A;
-      --good:#2F8F5E; --warn:#A9761A; --bad:#B4503E;
-      --shadow:0 1px 0 rgba(0,0,0,.02), 0 16px 34px -26px rgba(30,30,40,.35);
+      --ground:#14120f; --surface:#1c1914; --surface-2:#100e0b; --hairline:#2f2a23;
+      --ink:#e9e3d7; --muted:#c8c0b0; --faint:#9b917e;
+      --cyan:#e0965a; --cyan-dim:#b87a44; --gold:#c9a25a;
+      --good:#93ab84; --warn:#d8a44a; --bad:#e07a6b;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 18px 40px -24px rgba(0,0,0,.6);
     }
   }
-  :root[data-theme="dark"]{
-    --ground:#0B0E13; --surface:#141A23; --surface-2:#1B222D; --hairline:#263041;
-    --ink:#ECE7DB; --muted:#8B95A6; --faint:#5D6675;
-    --cyan:#5BD2DE; --cyan-dim:#367f88; --gold:#D8A44A;
-    --good:#63BE8E; --warn:#E0A83E; --bad:#E07A6B;
-    --shadow:0 1px 0 rgba(255,255,255,.03), 0 18px 40px -24px rgba(0,0,0,.7);
-  }
   :root[data-theme="light"]{
-    --ground:#F4F1E9; --surface:#FFFFFF; --surface-2:#EFEBE0; --hairline:#DED8C9;
-    --ink:#1A1E24; --muted:#5B6472; --faint:#93998f;
-    --cyan:#0C7A86; --cyan-dim:#5aa7ae; --gold:#9C6E1A;
-    --good:#2F8F5E; --warn:#A9761A; --bad:#B4503E;
-    --shadow:0 1px 0 rgba(0,0,0,.02), 0 16px 34px -26px rgba(30,30,40,.35);
+    --ground:#f4f1ea; --surface:#fcfbf7; --surface-2:#efe9dc; --hairline:#ddd6c8;
+    --ink:#23201b; --muted:#4c453a; --faint:#857a67;
+    --cyan:#b5540d; --cyan-dim:#c07a3d; --gold:#9c6e1a;
+    --good:#5f7a4f; --warn:#b07d1a; --bad:#b4503e;
+    --shadow:0 1px 2px rgba(35,32,27,.06), 0 16px 34px -22px rgba(35,32,27,.22);
+  }
+  :root[data-theme="dark"]{
+    --ground:#14120f; --surface:#1c1914; --surface-2:#100e0b; --hairline:#2f2a23;
+    --ink:#e9e3d7; --muted:#c8c0b0; --faint:#9b917e;
+    --cyan:#e0965a; --cyan-dim:#b87a44; --gold:#c9a25a;
+    --good:#93ab84; --warn:#d8a44a; --bad:#e07a6b;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 18px 40px -24px rgba(0,0,0,.6);
   }
 
   *{box-sizing:border-box}

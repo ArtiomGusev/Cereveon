@@ -1,11 +1,21 @@
-# Caddy reverse proxy for ChessCoach backend.
-# DOMAIN is injected via the DOMAIN environment variable in docker-compose.prod.yml.
-# Caddy automatically provisions and renews Let's Encrypt TLS certificates.
+# Caddy reverse proxy for the Cereveon backend + marketing site.
+#
+# DOMAIN is injected via the DOMAIN environment variable in
+# docker-compose.prod.yml.  Caddy automatically provisions and renews
+# Let's Encrypt TLS certificates for both the apex and the www host.
+#
+# Routing:
+#   /            (browsers, Accept: text/html)  -> static landing page (/srv/index.html)
+#   /fonts/*                                    -> static brand fonts   (/srv/fonts)
+#   everything else, and non-browser "/" hits   -> reverse_proxy to the API
+#
+# The API still answers {"status":"ok"} at "/" for health probes, curl,
+# and the mobile apps: only browsers (which send Accept: text/html) get
+# the landing page, so the API contract at "/" is unchanged.
 
 {$DOMAIN} {
-    reverse_proxy api:8000
-
     encode gzip
+    root * /srv
 
     header {
         # Security headers (augment the ones already set by FastAPI middleware)
@@ -17,6 +27,30 @@
         -Server
     }
 
+    # Brand fonts for the landing page (served from this origin, no CDN).
+    @assets path /fonts/*
+    handle @assets {
+        header Cache-Control "public, max-age=1209600"
+        file_server
+    }
+
+    # Marketing landing page — served to browsers hitting the root only.
+    @landing {
+        path /
+        header Accept *text/html*
+    }
+    handle @landing {
+        rewrite * /index.html
+        file_server
+    }
+
+    # Everything else: API endpoints, and non-browser "/" requests
+    # (health probes, curl, the mobile apps) still reach the API, which
+    # continues to answer {"status":"ok"} at "/".
+    handle {
+        reverse_proxy api:8000
+    }
+
     log {
         output file /var/log/caddy/access.log {
             roll_size 50mb
@@ -24,4 +58,11 @@
         }
         format json
     }
+}
+
+# Canonical host: redirect www -> apex.  Caddy also provisions a cert for
+# the www name so the TLS handshake succeeds before the redirect fires
+# (previously www.cereveon.com had no cert and threw a browser warning).
+www.{$DOMAIN} {
+    redir https://{$DOMAIN}{uri} permanent
 }

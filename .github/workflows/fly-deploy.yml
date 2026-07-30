@@ -611,7 +611,7 @@ jobs:
           host: ${{ secrets.HETZNER_HOST }}
           username: deploy
           key: ${{ secrets.HETZNER_SSH_KEY }}
-          source: "docker-compose.prod.yml,Caddyfile"
+          source: "docker-compose.prod.yml,Caddyfile,site"
           target: "/opt/chesscoach"
           overwrite: true
 
@@ -712,6 +712,13 @@ jobs:
             # ── 6a. Healthy: deploy done ──────────────────────────────────────
             if [ "$STATUS" = "healthy" ]; then
               echo "Deployment complete."
+              # Apply synced Caddyfile + landing-page (site/) changes.  The SCP
+              # step above updates them on disk, but the running caddy container
+              # only picks up a new volume mount / Caddyfile on recreate.
+              # ``up -d caddy`` recreates caddy when its compose config changed
+              # (adding the ./site:/srv mount does) and is a no-op otherwise, so
+              # it will not blip ingress on ordinary api-only deploys.
+              docker compose -f docker-compose.prod.yml up -d caddy || true
               # Prune stale unused images.  Without this, every merge to main
               # leaves prior cereveon-llm-api digests on disk; on the 38 GB
               # Hetzner box the / volume fills after ~30-50 merges and the

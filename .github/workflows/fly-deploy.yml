@@ -726,6 +726,12 @@ jobs:
               # never goes live).  --no-deps limits the action to caddy, whose
               # public image is already present locally.
               docker compose -f docker-compose.prod.yml up -d --no-deps caddy || true
+              # A Caddyfile *content* change (e.g. a new route) does not alter
+              # caddy's compose config, so the ``up -d`` above is a no-op for it.
+              # Gracefully reload the freshly-synced Caddyfile so routing changes
+              # take effect with zero downtime (caddy keeps the running config if
+              # the new one fails to validate).
+              docker compose -f docker-compose.prod.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile || true
               # Prune stale unused images.  Without this, every merge to main
               # leaves prior cereveon-llm-api digests on disk; on the 38 GB
               # Hetzner box the / volume fills after ~30-50 merges and the

@@ -34,6 +34,15 @@
         file_server
     }
 
+    # Business-plan page for potential buyers.  Unlisted: not linked from the
+    # site nav, and marked noindex in the HTML.  Served to any client at this
+    # path (no /business-plan API route exists to shadow), so link previews work.
+    @bizplan path /business-plan /business-plan.html
+    handle @bizplan {
+        rewrite * /business-plan.html
+        file_server
+    }
+
     # Marketing landing page — served to browsers hitting the root only.
     @landing {
         path /

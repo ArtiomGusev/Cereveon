@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cereveon — Unit Economics &amp; Cost Model</title>
+<meta name="description" content="Cereveon cost-to-serve and unit economics: measured token/compute costs, Free vs Premium tiers, Premium margins (95–97%), and at-scale break-even.">
+<meta name="theme-color" content="#F4F1E9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B0E13" media="(prefers-color-scheme: dark)">
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root{
+    color-scheme:light dark;
+    --ground:#0B0E13; --surface:#141A23; --surface-2:#1B222D; --hairline:#263041;
+    --ink:#ECE7DB; --muted:#8B95A6; --faint:#5D6675;
+    --cyan:#5BD2DE; --cyan-dim:#367f88; --gold:#D8A44A;
+    --good:#63BE8E; --warn:#E0A83E; --bad:#E07A6B;
+    --shadow:0 1px 0 rgba(255,255,255,.03), 0 18px 40px -24px rgba(0,0,0,.7);
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --ground:#F4F1E9; --surface:#FFFFFF; --surface-2:#EFEBE0; --hairline:#DED8C9;
+      --ink:#1A1E24; --muted:#5B6472; --faint:#93998f;
+      --cyan:#0C7A86; --cyan-dim:#5aa7ae; --gold:#9C6E1A;
+      --good:#2F8F5E; --warn:#A9761A; --bad:#B4503E;
+      --shadow:0 1px 0 rgba(0,0,0,.02), 0 16px 34px -26px rgba(30,30,40,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0B0E13; --surface:#141A23; --surface-2:#1B222D; --hairline:#263041;
+    --ink:#ECE7DB; --muted:#8B95A6; --faint:#5D6675;
+    --cyan:#5BD2DE; --cyan-dim:#367f88; --gold:#D8A44A;
+    --good:#63BE8E; --warn:#E0A83E; --bad:#E07A6B;
+    --shadow:0 1px 0 rgba(255,255,255,.03), 0 18px 40px -24px rgba(0,0,0,.7);
+  }
+  :root[data-theme="light"]{
+    --ground:#F4F1E9; --surface:#FFFFFF; --surface-2:#EFEBE0; --hairline:#DED8C9;
+    --ink:#1A1E24; --muted:#5B6472; --faint:#93998f;
+    --cyan:#0C7A86; --cyan-dim:#5aa7ae; --gold:#9C6E1A;
+    --good:#2F8F5E; --warn:#A9761A; --bad:#B4503E;
+    --shadow:0 1px 0 rgba(0,0,0,.02), 0 16px 34px -26px rgba(30,30,40,.35);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+    line-height:1.55;-webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--cyan) 6%, transparent), transparent 60%);}
+  .wrap{max-width:1040px;margin:0 auto;padding:56px 24px 80px}
+
+  .eyebrow{font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--cyan);
+    font-weight:600;display:flex;align-items:center;gap:10px}
+  .eyebrow::after{content:"";height:1px;flex:1;background:linear-gradient(90deg,var(--hairline),transparent)}
+  h1{font-family:var(--serif);font-style:italic;font-weight:500;letter-spacing:-.01em;
+    font-size:clamp(30px,5vw,46px);line-height:1.06;margin:18px 0 10px;text-wrap:balance}
+  h1 .em{color:var(--cyan)}
+  .lede{color:var(--muted);max-width:64ch;font-size:15.5px;margin:0}
+  .lede code{font-family:var(--mono);font-size:.9em;color:var(--ink);
+    background:var(--surface-2);padding:1px 6px;border-radius:5px}
+
+  .ornament{display:flex;align-items:center;gap:14px;color:var(--faint);margin:30px 0 26px}
+  .ornament::before,.ornament::after{content:"";height:1px;flex:1;background:var(--hairline)}
+  .ornament span{font-family:var(--serif);font-style:italic;color:var(--cyan)}
+
+  .sec-label{font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
+    font-weight:600;margin:0 0 14px}
+
+  /* ---- measured foundation strip ---- */
+  .foundation{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px}
+  .stat{background:var(--surface);border:1px solid var(--hairline);border-radius:14px;
+    padding:18px 18px 16px;box-shadow:var(--shadow)}
+  .stat .k{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .stat .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:26px;
+    letter-spacing:-.01em;margin:8px 0 2px;color:var(--ink)}
+  .stat .v .u{font-size:14px;color:var(--muted)}
+  .stat .sub{font-size:12.5px;color:var(--faint)}
+  .stat.hl .v{color:var(--cyan)}
+
+  .tag{display:inline-block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    font-weight:700;padding:2px 7px;border-radius:999px;vertical-align:middle}
+  .tag.meas{color:var(--cyan);border:1px solid color-mix(in srgb,var(--cyan) 45%,transparent);
+    background:color-mix(in srgb,var(--cyan) 10%,transparent)}
+  .tag.model{color:var(--gold);border:1px solid color-mix(in srgb,var(--gold) 45%,transparent);
+    background:color-mix(in srgb,var(--gold) 10%,transparent)}
+
+  .legend{display:flex;gap:18px;flex-wrap:wrap;color:var(--faint);font-size:12px;margin:8px 2px 34px}
+  .legend b{color:var(--muted);font-weight:600}
+
+  /* ---- tier panels ---- */
+  .tiers{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px}
+  .tier{background:var(--surface);border:1px solid var(--hairline);border-radius:16px;
+    overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column}
+  .tier .head{padding:20px 20px 16px;border-bottom:1px solid var(--hairline)}
+  .tier.premium{border-color:color-mix(in srgb,var(--gold) 30%,var(--hairline))}
+  .tier.premium .head{background:linear-gradient(180deg,color-mix(in srgb,var(--gold) 8%,transparent),transparent)}
+  .tier .name{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+  .tier .name h3{margin:0;font-family:var(--serif);font-style:italic;font-weight:500;font-size:23px}
+  .tier.premium .name h3{color:var(--gold)}
+  .tier .price{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:14px;color:var(--muted);text-align:right}
+  .tier .price b{color:var(--ink);font-size:16px}
+  .tier .limits{margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px}
+  .tier .limits li{font-size:13.5px;color:var(--muted);display:flex;gap:9px;align-items:flex-start}
+  .tier .limits li::before{content:"";margin-top:8px;width:5px;height:5px;border-radius:50%;
+    background:var(--cyan);flex:none}
+  .tier.premium .limits li::before{background:var(--gold)}
+  .tier .limits li b{color:var(--ink);font-weight:600}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .scenarios{padding:6px 8px 10px}
+  .scenarios caption{caption-side:top;text-align:left;font-size:11px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--faint);font-weight:600;padding:10px 12px 6px}
+  th,td{padding:9px 12px;text-align:left}
+  thead th{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600;
+    border-bottom:1px solid var(--hairline)}
+  .scenarios td:first-child{color:var(--muted)}
+  .scenarios tbody tr+tr td{border-top:1px solid color-mix(in srgb,var(--hairline) 55%,transparent)}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;color:var(--ink);white-space:nowrap}
+  .num.dim{color:var(--muted)}
+  tr.ceiling td{color:var(--ink)}
+  tr.ceiling .lbl{color:var(--warn);font-weight:600}
+
+  /* ---- business summary ---- */
+  .panel{background:var(--surface);border:1px solid var(--hairline);border-radius:16px;
+    box-shadow:var(--shadow);overflow:hidden;margin-bottom:14px}
+  .panel .scroll{overflow-x:auto}
+  .biz{min-width:560px}
+  .biz thead th{padding:14px 16px}
+  .biz th:first-child{text-align:left}
+  .biz th:not(:first-child),.biz td:not(:first-child){text-align:right}
+  .biz tbody td{padding:12px 16px;border-top:1px solid var(--hairline)}
+  .biz tbody td:first-child{color:var(--muted)}
+  .biz tbody td:first-child b{color:var(--ink);font-weight:600}
+  .biz .num{color:var(--ink)}
+  .pill{display:inline-block;font-family:var(--sans);font-variant-numeric:normal;font-weight:700;
+    font-size:12px;padding:3px 9px;border-radius:999px}
+  .pill.good{color:var(--good);background:color-mix(in srgb,var(--good) 13%,transparent)}
+  .pill.warn{color:var(--warn);background:color-mix(in srgb,var(--warn) 15%,transparent)}
+
+  .callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:34px}
+  .call{background:var(--surface-2);border:1px solid var(--hairline);border-radius:14px;padding:16px 16px 15px}
+  .call .n{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:23px;color:var(--cyan);letter-spacing:-.01em}
+  .call .t{font-size:12.5px;color:var(--muted);margin-top:4px}
+  .call .t b{color:var(--ink);font-weight:600}
+
+  .assume{border-top:1px solid var(--hairline);padding-top:22px}
+  .assume ol{margin:0;padding-left:20px;color:var(--muted);font-size:12.5px;line-height:1.7}
+  .assume li{margin-bottom:5px}
+  .assume code{font-family:var(--mono);font-size:.92em;color:var(--ink)}
+  .assume b{color:var(--ink);font-weight:600}
+  .foot{margin-top:24px;color:var(--faint);font-size:11.5px;display:flex;justify-content:space-between;
+    gap:12px;flex-wrap:wrap;border-top:1px solid var(--hairline);padding-top:14px}
+
+  @media (max-width:720px){
+    .foundation{grid-template-columns:1fr}
+    .tiers{grid-template-columns:1fr}
+    .callouts{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Cereveon · Unit Economics</div>
+    <h1>What it costs to serve <span class="em">Free</span> and <span class="em">Premium</span></h1>
+    <p class="lede">Cost-to-serve per user, built from two <b style="color:var(--ink);font-weight:600">measured</b> figures on the live stack — <code>deepseek-v4-flash</code> at current pricing ($0.14/M in · $0.28/M out) and Stockfish on the €10/mo Hetzner box. Everything else is modeled on those. Revenue is net of ~20% VAT and Google Play's 15% fee.</p>
+  </header>
+
+  <div class="ornament"><span>✦</span></div>
+
+  <!-- FOUNDATION -->
+  <p class="sec-label">The two numbers everything rests on <span class="tag meas">measured</span></p>
+  <div class="foundation">
+    <div class="stat">
+      <div class="k">1 coached game · all move-hints</div>
+      <div class="v">$0.0013</div>
+      <div class="sub">~16,400 tokens · a full ~25-move game of Mode-1 hints</div>
+    </div>
+    <div class="stat">
+      <div class="k">1 coach chat reply</div>
+      <div class="v">$0.0007</div>
+      <div class="sub">5,528 tokens measured (4,056 in · 1,472 out), warm cache</div>
+    </div>
+    <div class="stat hl">
+      <div class="k">Stockfish CPU · per game</div>
+      <div class="v">€0.000007</div>
+      <div class="sub">≈0.2% of token cost — a capacity limit, not a cost</div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><b>Basis:</b> DeepSeek deepseek-v4-flash, current price (unchanged by the model rename)</span>
+    <span><b>FX:</b> costs shown in USD (DeepSeek bills USD); revenue in EUR</span>
+  </div>
+
+  <!-- TIERS -->
+  <p class="sec-label">Cost per user, per month — by tier</p>
+  <div class="tiers">
+
+    <div class="tier free">
+      <div class="head">
+        <div class="name"><h3>Free</h3><div class="price"><b>€0</b><br>ad-free, no card</div></div>
+        <ul class="limits">
+          <li><b>1 coached game / day</b> — hard-blocked, board locks after</li>
+          <li><b>3 coach chats / day</b> — 4th shows the paywall</li>
+          <li>Full board, history, settings — never gated</li>
+        </ul>
+      </div>
+      <table class="scenarios">
+        <caption>Monthly token cost</caption>
+        <thead><tr><th>Usage profile</th><th style="text-align:right">Games</th><th style="text-align:right">Chats</th><th style="text-align:right">Cost</th></tr></thead>
+        <tbody>
+          <tr><td>Light</td><td class="num dim">2</td><td class="num dim">5</td><td class="num">$0.006</td></tr>
+          <tr><td>Realistic average</td><td class="num dim">8</td><td class="num dim">25</td><td class="num">$0.028</td></tr>
+          <tr class="ceiling"><td class="lbl">Ceiling — maxed daily</td><td class="num dim">30</td><td class="num dim">90</td><td class="num">$0.10</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tier premium">
+      <div class="head">
+        <div class="name"><h3>Premium</h3><div class="price"><b>€9.99</b>/mo<br>or €71.99/yr</div></div>
+        <ul class="limits">
+          <li><b>Unlimited games</b> — full hints on 10/day, deterministic (zero-token) after</li>
+          <li><b>30 coach chats / day</b> — an anti-abuse rail, ~10× real use</li>
+          <li>Curriculum, repertoire drills, chat grounded in your games</li>
+        </ul>
+      </div>
+      <table class="scenarios">
+        <caption>Monthly token cost</caption>
+        <thead><tr><th>Usage profile</th><th style="text-align:right">Games</th><th style="text-align:right">Chats</th><th style="text-align:right">Cost</th></tr></thead>
+        <tbody>
+          <tr><td>Light</td><td class="num dim">10</td><td class="num dim">30</td><td class="num">$0.034</td></tr>
+          <tr><td>Typical Premium</td><td class="num dim">60</td><td class="num dim">240</td><td class="num">$0.25</td></tr>
+          <tr class="ceiling"><td class="lbl">Ceiling — maxed daily</td><td class="num dim">300</td><td class="num dim">900</td><td class="num">$1.02</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- BUSINESS SUMMARY -->
+  <p class="sec-label">The business — Premium margin, now &amp; if DeepSeek doubles prices</p>
+  <div class="panel">
+    <div class="scroll">
+      <table class="biz">
+        <thead>
+          <tr>
+            <th>Premium subscriber</th>
+            <th>Net revenue</th>
+            <th>Cost — typical</th>
+            <th>Margin</th>
+            <th>Cost — ceiling</th>
+            <th>Margin</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Monthly</b> · €9.99 gross</td>
+            <td class="num">€7.08</td>
+            <td class="num">€0.23</td>
+            <td class="num"><span class="pill good">97%</span></td>
+            <td class="num">€0.94</td>
+            <td class="num"><span class="pill good">87%</span></td>
+          </tr>
+          <tr>
+            <td><b>Annual</b> · €71.99 gross (≈€4.25/mo)</td>
+            <td class="num">€4.25</td>
+            <td class="num">€0.23</td>
+            <td class="num"><span class="pill good">95%</span></td>
+            <td class="num">€0.94</td>
+            <td class="num"><span class="pill good">78%</span></td>
+          </tr>
+          <tr>
+            <td><b>Monthly</b> · if DeepSeek 2× <span class="tag model">scenario</span></td>
+            <td class="num">€7.08</td>
+            <td class="num">€0.46</td>
+            <td class="num"><span class="pill good">94%</span></td>
+            <td class="num">€1.88</td>
+            <td class="num"><span class="pill warn">73%</span></td>
+          </tr>
+          <tr>
+            <td><b>Annual</b> · if DeepSeek 2× <span class="tag model">scenario</span></td>
+            <td class="num">€4.25</td>
+            <td class="num">€0.46</td>
+            <td class="num"><span class="pill good">89%</span></td>
+            <td class="num">€1.88</td>
+            <td class="num"><span class="pill warn">56%</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="callouts">
+    <div class="call">
+      <div class="n">2 subs</div>
+      <div class="t">cover the entire <b>€10/mo</b> fixed infrastructure (Hetzner box)</div>
+    </div>
+    <div class="call">
+      <div class="n">~700</div>
+      <div class="t">free users funded by <b>one</b> monthly Premium subscriber (blended usage)</div>
+    </div>
+    <div class="call">
+      <div class="n">&lt;1%</div>
+      <div class="t">conversion covers all costs at scale — well inside the 2–5% freemium norm</div>
+    </div>
+  </div>
+
+  <!-- SCALE -->
+  <p class="sec-label">At scale — blended average across all signups <span class="tag model">modeled</span></p>
+  <div class="panel">
+    <div class="scroll">
+      <table class="biz">
+        <thead>
+          <tr><th>Total users</th><th>Token cost / mo</th><th>Infra / mo</th><th>Total cost / mo</th><th>Subs to break even</th><th>Conversion</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><b>100</b></td><td class="num">€1</td><td class="num">€10</td><td class="num">€11</td><td class="num">2</td><td class="num"><span class="pill good">2.0%</span></td></tr>
+          <tr><td><b>1,000</b></td><td class="num">€10</td><td class="num">€10</td><td class="num">€20</td><td class="num">3</td><td class="num"><span class="pill good">0.3%</span></td></tr>
+          <tr><td><b>10,000</b></td><td class="num">€100</td><td class="num">€40</td><td class="num">€140</td><td class="num">20</td><td class="num"><span class="pill good">0.2%</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <p style="color:var(--faint);font-size:12px;line-height:1.65;margin:11px 2px 0">Blended ≈ <b style="color:var(--muted)">€0.010/user/mo</b> (~3 games + 10 chats) — most signups are light or dormant, so the mean sits below the engaged "realistic" figure in the Free panel. Cost treats every user as free (conservative); converted users bring €7.08 net each and more than pay their own slightly-higher token cost.</p>
+
+  <!-- ASSUMPTIONS -->
+  <div class="assume">
+    <p class="sec-label" style="margin-bottom:12px">Assumptions &amp; provenance</p>
+    <ol>
+      <li><b>Measured</b> (live prod, deepseek-v4-flash): one chat reply = 5,528 tokens; one full coached game ≈ 16,400 tokens (reconciled against a real 1-game+3-chat session at 33k tokens / $0.0033).</li>
+      <li><b>Prices:</b> $0.14/M input (cache-miss), $0.0028/M input (cache-hit), $0.28/M output. Steady-state assumes the ~2k-token system prompt is a warm shared cache-hit. The "2×" rows are a scenario — the announced increase has <b>not</b> landed; v4-flash is still at the old price.</li>
+      <li><b>Revenue net:</b> €9.99 → −20% VAT → −15% Play fee = <code>€7.08</code>/mo. Annual €71.99 → ≈€51/yr = <code>€4.25</code>/mo net. Costs converted at ~$1 = €0.92.</li>
+      <li><b>Modeled usage:</b> the Free panel's "realistic" row (8 games + 25 chats/mo) is an <b>engaged</b> user; the at-scale table uses a lower <b>blended</b> average (~3 games + 10 chats/mo ≈ €0.010/user) because most signups are light or dormant. Typical Premium = 2 games + 8 chats/day. Ceilings are every daily cap hit for 30 days — a pathological user no real account reaches.</li>
+      <li><b>Not a cost, a capacity limit:</b> Stockfish CPU is ~€0.000007/game. The 2-vCPU box caps at ~50–100 concurrently active players before eval queueing, well before tokens become the constraint. AI opponent runs on-device (zero server cost).</li>
+    </ol>
+    <div class="foot">
+      <span>Cereveon · freemium cost model</span>
+      <span>Basis: measured 2026-07-06 · deepseek-v4-flash · enforcement live in prod</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -176,10 +176,14 @@ class TestGameFinishPgnValidation:
         req = _GameFinishRequest(**_valid_req(pgn=_VALID_PGN))
         assert req.pgn == _VALID_PGN
 
-    def test_headers_only_pgn_accepted(self):
-        """GAME_PGN_HEADERS_ONLY_ACCEPTED: PGN with headers but no moves → accepted."""
-        req = _GameFinishRequest(**_valid_req(pgn=_HEADERS_ONLY_PGN))
-        assert req.pgn == _HEADERS_ONLY_PGN
+    def test_headers_only_pgn_rejected(self):
+        """GAME_PGN_HEADERS_ONLY_REJECTED: PGN with headers but no moves →
+        ValidationError.  A finished game with an empty mainline is a
+        degenerate/malformed finish; the PGN validator's "no moves found in
+        mainline" guard rejects it, consistent with the gibberish and
+        whitespace rejections above."""
+        with pytest.raises(ValidationError):
+            _GameFinishRequest(**_valid_req(pgn=_HEADERS_ONLY_PGN))
 
 
 class TestGameFinishOtherValidation:

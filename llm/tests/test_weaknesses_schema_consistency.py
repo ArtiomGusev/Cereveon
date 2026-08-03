@@ -85,7 +85,18 @@ def _analysis_from_losses(
 ) -> AccuracyAnalysis:
     """Call ``_summarise`` directly with hand-shaped loss buckets so
     the test doesn't depend on a live Stockfish pool."""
-    return _summarise(losses_cp, phase_losses_cp, player_color=chess.WHITE)
+    return _summarise(
+        losses_cp,
+        phase_losses_cp,
+        player_color=chess.WHITE,
+        # The eval series only populate AccuracyAnalysis's telemetry fields
+        # (player_pov_eval_*, white_pov_eval_per_position_cp) — they do NOT
+        # feed the weakness-rate math these tests pin, so empty series keep
+        # the helper focused on the hand-shaped loss buckets it builds.
+        player_pov_eval_before_cp=[],
+        player_pov_eval_after_cp=[],
+        position_evals_cp=[],
+    )
 
 
 _PHASE_LABELS: tuple[str, ...] = ("opening", "middlegame", "endgame")

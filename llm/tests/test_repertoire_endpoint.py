@@ -71,7 +71,24 @@ def _fake_request():
 
 
 def _disable_limiter():
-    from llm.seca.shared_limiter import limiter
+    """Return the endpoints' limiter with its rate-limit window cleared.
+
+    Imported from the router module so it is exactly the object the
+    ``@limiter.limit`` decorators are bound to.  Under slowapi 0.1.10 the
+    in-process FixedWindow storage accumulates across the full CI suite, so
+    toggling ``enabled`` alone is not enough for a helper that fires many
+    calls in one test (``TestRepertoireDrillResult.test_clamped_to_unit_interval``
+    drills mastery 50+ times against the shared 30/minute budget, tripping a
+    429 once the process-wide window fills).  ``reset()`` clears the window so
+    each functional call starts from zero; the rate limit itself is exercised
+    by ``test_security_game_finish_rate_limit``, not here.
+    """
+    from llm.seca.repertoire.router import limiter
+
+    try:
+        limiter.reset()
+    except Exception:  # pragma: no cover - storage backends without reset()
+        pass
     return limiter
 
 

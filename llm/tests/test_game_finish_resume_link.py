@@ -114,6 +114,16 @@ def _make_player_and_db():
     db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = (
         []
     )
+    # The idempotent-replay guard (events.router._replayed_finish_response,
+    # added by the 2026-07-14 P2 #1 double-finish fix) runs a
+    # .query(GameEvent).filter(...).order_by(...).first() BEFORE the finish
+    # body whenever a game_id is present.  Left at its default the auto-
+    # MagicMock returns a truthy fake "prior event", so the guard short-
+    # circuits to the 202 pending replay and the finish body (repo.finish_game
+    # / store_game) never runs — every game_id-carrying assertion below then
+    # sees 0 calls.  Force the lookup to None so these tests exercise a FRESH
+    # finish.
+    db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
     return player, db
 
 

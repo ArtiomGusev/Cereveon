@@ -377,6 +377,80 @@ TEST_TARGETS = [
     # producers, disconnected_at lifecycle, GET /lichess/status fields)
     # is pinned in test_lichess_import.py DC_01..DC_08.
     "llm/tests/test_notifications.py",
+    # -------------------------------------------------------------------
+    # CI-registration audit (2026-08-03).  The files below existed in the
+    # tree but were wired into NO CI gate — they never ran on a push (the
+    # "silent skip" debt class).  All were run locally and pass.  Five
+    # carried dormant test-drift that was repaired in the same change,
+    # without weakening any assertion:
+    #   * test_security_new_findings.py — source-scanners repointed from
+    #     server.py to server_schemas.py after ChatRequest + its validators
+    #     were extracted there (the size/per-item caps are unchanged).
+    #   * test_security_depth.py — over-long ASSISTANT turns are now
+    #     TRUNCATED to 2000 (deliberate: rejecting replayed coach history
+    #     would 422 the thread), so the assertion pins truncation, not
+    #     rejection; the cap still holds.
+    #   * test_game_finish_resume_link.py — the db mock now returns None for
+    #     the idempotent-replay lookup so the finish body actually runs.
+    #   * test_weaknesses_schema_consistency.py — the _summarise() helper
+    #     call updated for the added eval-series params (telemetry only).
+    #   * test_game_finish_events.py — headers-only PGN is now REJECTED
+    #     ("no moves in mainline"); the assertion pins the stricter guard.
+    # The tripwire registered first fails CI if any future test file is
+    # left un-gated like these were.
+    "llm/tests/test_ci_registration_completeness.py",
+    "llm/rag/tests/golden/test_negative_llm.py",
+    "llm/rag/tests/golden/test_positive_llm.py",
+    "llm/rag/tests/test_explanation_score_fuzz.py",
+    "llm/rag/tests/test_firewall_integration.py",
+    "llm/rag/tests/test_input_firewall.py",
+    "llm/rag/tests/unit/test_empty_retrieval_logging.py",
+    "llm/rag/tests/unit/test_validator_taxonomy_invariants.py",
+    "llm/seca/auth/test_hashing.py",
+    "llm/tests/test_auth_update_me.py",
+    "llm/tests/test_bandit_decision.py",
+    "llm/tests/test_bandit_integration.py",
+    "llm/tests/test_bandit_telemetry.py",
+    "llm/tests/test_billing_verify.py",
+    "llm/tests/test_board_features.py",
+    "llm/tests/test_chat_coach_voice.py",
+    "llm/tests/test_chat_persistence.py",
+    "llm/tests/test_chat_stream_pipeline.py",
+    "llm/tests/test_coaching_not_overrejected.py",
+    "llm/tests/test_deployment_security_qa.py",
+    "llm/tests/test_deterministic_mate_phrasing.py",
+    "llm/tests/test_elo_scale.py",
+    "llm/tests/test_engine_facts.py",
+    "llm/tests/test_entitlements_schema.py",
+    "llm/tests/test_entitlements_service.py",
+    "llm/tests/test_game_checkpoint.py",
+    "llm/tests/test_game_finish_events.py",
+    "llm/tests/test_game_finish_resume_link.py",
+    "llm/tests/test_game_finish_status_endpoint.py",
+    "llm/tests/test_game_positions.py",
+    "llm/tests/test_game_start_entitlements.py",
+    "llm/tests/test_live_move_entitlements.py",
+    "llm/tests/test_live_move_quality.py",
+    "llm/tests/test_llm_health.py",
+    "llm/tests/test_log_injection_sanitiser.py",
+    "llm/tests/test_move_phrase.py",
+    "llm/tests/test_move_quality.py",
+    "llm/tests/test_pgn_accuracy.py",
+    "llm/tests/test_repertoire_endpoint.py",
+    "llm/tests/test_safety_freeze.py",
+    "llm/tests/test_schema_boundary.py",
+    "llm/tests/test_security_auth_depth.py",
+    "llm/tests/test_security_depth.py",
+    "llm/tests/test_security_game_finish_rate_limit.py",
+    "llm/tests/test_security_headers.py",
+    "llm/tests/test_security_input_chars.py",
+    "llm/tests/test_security_new_findings.py",
+    "llm/tests/test_semantic_strategic_vocab_unlock.py",
+    "llm/tests/test_skill_updater_rollback_safety.py",
+    "llm/tests/test_speculative_should_unlock.py",
+    "llm/tests/test_structure_plan_unlock.py",
+    "llm/tests/test_validator_parity.py",
+    "llm/tests/test_weaknesses_schema_consistency.py",
 ]
 
 COVERAGE_TARGETS = [

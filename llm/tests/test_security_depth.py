@@ -458,10 +458,18 @@ class TestPlayerProfileInjectionBypass:
                     messages=[{"role": "user", "content": self._INJECTION_PAYLOAD}],
                 )
 
-            # The 2000-char cap must NOT regress behind the role branch:
-            # an over-long assistant turn is still rejected.
-            with pytest.raises(ValidationError):
+            # The 2000-char cap must NOT regress behind the role branch: an
+            # over-long ASSISTANT turn is TRUNCATED to 2000 (deliberately not
+            # rejected — rejecting replayed coach history would 422 the whole
+            # thread; see ChatTurnModel.validate_content in server_schemas.py).
+            # The content is still bounded, so the size-injection surface stays
+            # closed by the cap either way.
+            truncated_assistant = (
                 ChatRequest(fen=fen, messages=[{"role": "assistant", "content": "x" * 2001}])
+                .messages[0]
+                .content
+            )
+            assert len(truncated_assistant) == 2000, "assistant turn length cap regressed"
 
             # Control chars are still stripped from trusted assistant turns —
             # the load-bearing defense that remains for assistant content.

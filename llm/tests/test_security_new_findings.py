@@ -482,7 +482,10 @@ class TestChatRequestPastMistakesItemLength:
 
     def test_sn08_past_mistakes_validator_checks_item_length(self):
         """SN_08: validate_past_mistakes in server.py must enforce a per-item length cap."""
-        source = _read("server.py")
+        # ChatRequest + its validators moved from server.py into
+        # server_schemas.py (request-model extraction); the security
+        # property (per-item cap) is unchanged, so inspect the new home.
+        source = _read("server_schemas.py")
         # The validator must contain per-item length logic, not just list-level length.
         # We look for both the list-level check AND a per-item check.
         has_list_check = "len(v) > 20" in source
@@ -493,10 +496,10 @@ class TestChatRequestPastMistakesItemLength:
             or "len(m)" in source
         )
         assert has_list_check, (
-            "validate_past_mistakes in server.py has no list-length guard (len(v) > 20)."
+            "validate_past_mistakes in server_schemas.py has no list-length guard (len(v) > 20)."
         )
         assert has_item_check, (
-            "validate_past_mistakes in server.py has no per-item length guard. "
+            "validate_past_mistakes in server_schemas.py has no per-item length guard. "
             "A single past_mistakes entry could inject megabytes of text into the LLM. "
             "Add a per-item cap (e.g., max 500 chars per item)."
         )
@@ -544,9 +547,12 @@ class TestChatRequestPlayerProfileSize:
 
     def test_sn09_player_profile_has_validator(self):
         """SN_09: ChatRequest must have a @field_validator('player_profile') method."""
-        tree = _parse("server.py")
+        # ChatRequest moved from server.py into server_schemas.py (request-
+        # model extraction); the @field_validator('player_profile') size cap
+        # is unchanged, so parse the new home.
+        tree = _parse("server_schemas.py")
         cls = _find_class(tree, "ChatRequest")
-        assert cls is not None, "ChatRequest not found in server.py"
+        assert cls is not None, "ChatRequest not found in server_schemas.py"
         assert _has_field_validator(cls, "player_profile"), (
             "ChatRequest has no @field_validator('player_profile'). "
             "player_profile is passed unvalidated into the LLM context — "

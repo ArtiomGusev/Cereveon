@@ -187,10 +187,22 @@ CVE-2026-5435 until:2027-07-01
 CVE-2026-6238 until:2027-07-01
 
 # ---------------------------------------------------------------------------
-# perl-base 5.40.1-6 (python:3.13-slim / Debian 13 Trixie): an 8-CVE cluster,
+# perl-base 5.40.1-6 (python:3.13-slim / Debian 13 Trixie): an 11-CVE cluster,
 # ALL UNFIXED in Debian (no FixedVersion via ``apt-get upgrade -y``; the
-# Dockerfile already runs ``apt-get upgrade -y``).  Confirmed by the Trivy
-# SARIF scan on 2026-06-17 as GitHub code-scanning alerts #355-#362.
+# Dockerfile already runs ``apt-get upgrade -y``).  Eight were confirmed by the
+# Trivy SARIF scan on 2026-06-17 as GitHub code-scanning alerts #355-#362;
+# three more (alerts #410-#412) arrived in the 2026-07-30 scan and are analysed
+# in their own dated sub-block below.
+#
+# WHY PERL CVEs KEEP LANDING ON THIS IMAGE: Debian records perl advisories
+# against the ``perl`` SOURCE package, and Trivy maps a source-package advisory
+# onto every binary package built from it that is present in the image.  The
+# only perl binary package in ``python:3.13-slim`` is ``perl-base``, so every
+# perl CVE is reported against it — whether or not the affected code actually
+# ships inside that binary package.  It frequently does not: perl-base is the
+# minimal Essential subset, and most flagged modules live in
+# ``perl-modules-5.40`` / ``libperl5.40``, neither of which is installed here.
+# See the CVE-2026-57433 (Storable) entry below for a worked example.
 #
 # ``perl-base`` is a Debian ``Essential: yes`` / ``Priority: required``
 # package: it ships in every Debian base image to support dpkg/apt maintainer
@@ -201,7 +213,7 @@ CVE-2026-6238 until:2027-07-01
 #   - The runtime image launches ``uvicorn llm.server:app`` as USER appuser
 #     (uid 10001).  The app is pure CPython; the HEALTHCHECK is python; the
 #     ONLY external binary the code spawns is Stockfish, located via
-#     ``shutil.which("stockfish")`` (llm/server.py:275) and driven over the
+#     ``shutil.which("stockfish")`` (llm/server.py:328) and driven over the
 #     UCI text protocol (ASCII bytes only — see
 #     llm/seca/engines/stockfish/pool.py).
 #   - The perl INTERPRETER is never executed: no ``system("perl")``, no
@@ -231,6 +243,67 @@ CVE-2026-9538 until:2027-07-01
 CVE-2025-15649 until:2027-07-01
 # CVE-2026-7010 MEDIUM: HTTP::Tiny does not validate CRLF in request fields (alert #362)
 CVE-2026-7010 until:2027-07-01
+
+# --- 2026-07-30 scan additions: alerts #410-#412 ---------------------------
+# Three further perl source-package CVEs against the same perl-base 5.40.1-6.
+# No-fix status re-verified directly against the Debian security tracker on
+# 2026-08-27 (not merely taken from the Trivy DB snapshot): all three list
+# trixie as "vulnerable" at 5.40.1-6 and are fixed only in sid/forky 5.42.3-1
+# (upstream perl v5.43.10 / v5.43.11).  There is no trixie backport, so the
+# ``apt-get upgrade -y`` already in llm/Dockerfile.api cannot clear them and
+# the BUILDDATE cache-bust rebuild will keep re-reporting them.
+#
+# The shared reachability analysis above applies unchanged, re-verified
+# 2026-08-27: the perl interpreter is never executed in this image.  The only
+# external process the runtime spawns is Stockfish, and ``grep -rin "perl"``
+# over ``llm/`` returns no first-party hit.  Per-CVE detail:
+#
+# CVE-2026-57433 CRITICAL (alert #411): signed integer overflow in Storable's
+#   ``retrieve_hook_common`` — an SX_HOOK record carries a signed 32-bit item
+#   count, and a count of I32_MAX wraps the ``av_extend(count + 1)`` addition
+#   negative.  The trigger is ``Storable::thaw``/``retrieve`` on a crafted
+#   blob, and the advisory's own impact statement is that ``av_extend``
+#   receives the negative count and "dies with a panic, terminating the
+#   deserialization" — a DoS of the deserializing perl process, not code
+#   execution, despite the CRITICAL label.
+#   Unreachable here for TWO independent reasons.  (1) Storable is not merely
+#   unused, it is ABSENT: it is an XS module shipped in ``perl-modules-5.40`` /
+#   ``libperl5.40``, and the trixie ``perl-base`` file list contains no
+#   ``Storable.pm`` / ``Storable.so``.  Neither package is installed in
+#   ``python:3.13-slim``, so the vulnerable code is not in the image at all —
+#   this alert is purely the source-package mapping described in the cluster
+#   header.  (2) Even had it shipped, nothing would call it: there is no perl
+#   process, no Storable blob, and no deserialization of one.
+# CVE-2026-57432 HIGH (alert #412): integer overflow in ``S_measure_struct``
+#   (pp_pack.c) — an unchecked repeat count in a ``pack``/``unpack`` template
+#   wraps the signed total negative, advancing the buffer pointer out of bounds
+#   and exposing heap memory to the caller.  Unlike Storable, ``pack`` and
+#   ``unpack`` are interpreter builtins, so this code IS present inside
+#   ``perl-base``'s ``/usr/bin/perl``.  Reachability therefore rests on the
+#   single load-bearing fact: reaching it needs a perl program running an
+#   attacker-influenced template, and no perl program runs here.
+# CVE-2026-13221 CRITICAL (alert #410): a regex alternation with more than
+#   65,535 fixed-string branches overflows the 16-bit delta field of the
+#   compiled trie's match table, silently truncating it and yielding both
+#   false-positive and false-negative matches.  The harm is confined to code
+#   that lets perl regexes make access-control or filtering decisions.  Same
+#   interpreter-core location and same class as the already-accepted
+#   CVE-2026-8376 above, and the same conclusion: this image delegates no
+#   security decision to a perl regex, because it runs no perl.
+#
+# NOTE: none of the three ever reached the CRITICAL deploy gate in
+# .github/workflows/fly-deploy.yml — that step scans with
+# ``ignore-unfixed: true`` and these carry no FixedVersion.  They appear only
+# in the SARIF step (``ignore-unfixed: false``), which deliberately reports
+# unfixed findings to the Security tab for triage.  Listing them here retires
+# them from that triage queue with a written rationale; it does not weaken any
+# gate.
+# Accepted risk pending a Debian perl patch; remove each entry once
+# ``apt-get upgrade -y`` ships a fixed perl-base — re-check the trixie row at
+# https://security-tracker.debian.org/tracker/source-package/perl.
+CVE-2026-57433 until:2027-07-01
+CVE-2026-57432 until:2027-07-01
+CVE-2026-13221 until:2027-07-01
 
 # ---------------------------------------------------------------------------
 # libsqlite3-0 3.46.1-7+deb13u1 (python:3.13-slim / Debian 13 Trixie): two

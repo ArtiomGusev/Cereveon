@@ -365,6 +365,131 @@ CVE-2026-11824 until:2027-07-01
 # ``apt-get upgrade -y`` ships a fixed libbz2-1.0.
 CVE-2026-42250 until:2027-07-01
 
+# ---------------------------------------------------------------------------
+# 2026-08-27 scan batch: alerts #408-#409, #416-#419, #421-#424, #427-#428.
+# The first image rebuild in three weeks (fresher Trivy DB plus newer Debian
+# package versions) surfaced eight further CVEs across four source packages.
+# ALL EIGHT are confirmed UNFIXED in Debian 13 Trixie and every one carries
+# the tracker note ``<no-dsa> (Minor issue)`` — Debian has explicitly decided
+# not to issue a security advisory for them in stable, so no amount of
+# ``apt-get upgrade -y`` will clear them.  Each was checked individually
+# against its per-CVE page on the Debian security tracker on 2026-08-27
+# rather than trusting the Trivy DB snapshot; unlike CVE-2026-14456 in the
+# BACKPORT FALSE POSITIVES section below, none of these is already fixed.
+# ---------------------------------------------------------------------------
+
+# glibc 2.41-12+deb13u3: two flaws in the ``wordexp(3)`` family.
+#   CVE-2026-6368 (alerts #416 libc-bin / #418 libc6): wordexp() called with
+#     WRDE_APPEND can leave invalid memory in the ``we_wordv`` member, so a
+#     subsequent wordfree() aborts the process.
+#   CVE-2026-6791 (alerts #417 libc-bin / #419 libc6): parse_tilde() does not
+#     bounds-check the username it copies onto the stack, so a username of
+#     thousands of characters exhausts the thread stack (stack clash).
+# Reachability analysis (2026-08-27) — shared by both:
+#   - Both live in wordexp(), the POSIX shell-style word-expansion API, and
+#     nothing in this image calls it.  The Python standard library exposes no
+#     wordexp binding at all; ``os.path.expanduser`` and ``glob`` are
+#     implemented in pure Python (Lib/posixpath.py, Lib/glob.py) and
+#     ``subprocess`` goes straight to fork/execve.  Shells do their own word
+#     expansion rather than calling glibc's.
+#   - No code path in the image runs a shell: ``grep -rin
+#     "wordexp\|os.system\|os.popen\|expanduser\|expandvars"`` over ``llm/``
+#     is clean, there is no ``shell=True`` anywhere, and the only external
+#     process the runtime spawns is Stockfish, located by
+#     ``shutil.which("stockfish")`` (llm/server.py:328) and driven over the
+#     UCI text protocol.
+#   - CVE-2026-6791 additionally needs an attacker-controlled USERNAME to
+#     reach parse_tilde.  The service expands no ``~user`` string at all, let
+#     alone one taken from a request.
+# Accepted risk pending a Debian glibc patch (fixed upstream in 2.43-3;
+# trixie marked <no-dsa>).  Remove once apt-get upgrade -y ships a fix.
+CVE-2026-6368 until:2027-07-01
+CVE-2026-6791 until:2027-07-01
+
+# systemd 257.13-1~deb13u1: two local flaws, both in systemd DAEMONS rather
+# than in the libraries this image links.
+#   CVE-2026-15059 (alerts #421 libsystemd0 / #423 libudev1): missing path
+#     traversal validation in the systemd-oomd IPC API lets a local
+#     unprivileged user terminate arbitrary local processes.
+#   CVE-2026-16742 (alerts #422 libsystemd0 / #424 libudev1): systemd-homed
+#     privilege escalation by adding a logged-in homed-managed user to an
+#     arbitrary system group.
+# Reachability analysis (2026-08-27) — shared by both, and the same shape as
+# the systemd entries above (CVE-2026-29111 / -4105 / -40226 / -40225):
+#   - The image contains the shared LIBRARIES ``libsystemd0`` and
+#     ``libudev1`` only, pulled in transitively.  It ships no systemd init
+#     system, no systemd-oomd, no systemd-homed and no D-Bus system bus —
+#     and the vulnerable code lives in exactly those daemons, not in the
+#     libraries we link against.
+#   - The container runs one process, ``uvicorn llm.server:app``, as USER
+#     appuser (uid 10001).  There is no oomd socket to address, no
+#     homed-managed user to promote, and no second local unprivileged
+#     session to escalate from; both CVEs presuppose a local multi-user
+#     system that a single-process container is not.
+#   - ``grep -rin "systemd\|udev\|dbus\|oomd\|homed"`` over ``llm/`` returns
+#     one comment in a CI test about the Android emulator's /dev/kvm udev
+#     rule.  Nothing in the runtime touches any of it.
+# Accepted risk; trixie marked <no-dsa> (Minor issue).
+CVE-2026-15059 until:2027-07-01
+CVE-2026-16742 until:2027-07-01
+
+# tar 1.35+dfsg-3.1: two archive-extraction boundary escapes.
+#   CVE-2026-18477 (alert #427): TOCTOU in incremental dumpdir 'X' rename
+#     handling — a local attacker with write access to a directory can
+#     influence a RESTORE so that files are created, renamed or overwritten
+#     outside the intended extraction directory.
+#   CVE-2026-18508 (alert #428): under ``--one-top-level``, a crafted archive
+#     can create hardlinks that escape the boundary and, combined with a
+#     preexisting symlink under the working directory, write outside it.
+# Reachability analysis (2026-08-27) — shared by both.  Sibling of
+# CVE-2026-5704 above (same package), but argued independently here:
+#   - Both require RUNNING GNU tar to extract an attacker-supplied archive.
+#     The runtime image never invokes tar — CMD is uvicorn, the HEALTHCHECK
+#     is python, and the only external binary spawned is Stockfish.  tar is
+#     present solely because the base image ships it for apt's use at build
+#     time.
+#   - The service extracts no archives at all: ``grep -rin
+#     "tarfile\|unpack_archive\|make_archive\|zipfile"`` over ``llm/`` is
+#     clean.  Note further that Python's ``tarfile`` module is a pure-Python
+#     implementation — even a future caller would not execute GNU tar's
+#     code, so these two CVEs would still not apply.
+#   - CVE-2026-18477 additionally requires a local attacker holding write
+#     access to the target directory AND an incremental restore in progress.
+#     The container runs a single process as one non-root user, performs no
+#     restores, and its rootfs is read-only apart from the /app/data volume
+#     and a /tmp tmpfs (docker-compose.prod.yml, pinned by CH_03 / CH_04 in
+#     llm/tests/test_container_hardening.py).
+# Accepted risk; trixie marked <no-dsa> (Minor issue).
+CVE-2026-18477 until:2027-07-01
+CVE-2026-18508 until:2027-07-01
+
+# libsqlite3-0 3.46.1-7+deb13u1: two flaws in the SQLite SESSION EXTENSION.
+#   CVE-2026-50812 (alert #408): NULL pointer dereference — a malformed
+#     changeset blob passed to sqlite3changeset_apply_v3() reaches
+#     sqlite3_value_type() with a NULL pointer and crashes the process (DoS).
+#   CVE-2026-50813 (alert #409): information disclosure through the changeset
+#     concat / changegroup merge path.
+# Reachability analysis (2026-08-27) — shared by both.  This is a DIFFERENT
+# code path from the FTS5 pair above (CVE-2026-11822 / -11824), so the case
+# is made independently rather than by cross-reference:
+#   - Both live in SQLite's optional Session Extension (the
+#     ``sqlite3session.h`` / ``sqlite3changeset_*`` API).  CPython's
+#     ``sqlite3`` module does not wrap that API at all — no changeset,
+#     changegroup or session object is exposed to Python — so no Python code
+#     in this image can reach the vulnerable functions.
+#   - Exploitation additionally requires feeding an attacker-controlled
+#     CHANGESET BLOB to the extension.  The service produces and consumes no
+#     changesets: ``grep -rin
+#     "changeset\|sqlite3session\|load_extension"`` over ``llm/`` is clean.
+#   - Production runs PostgreSQL (psycopg2 -> Hetzner Postgres).  SQLite
+#     appears only on the dev/test path via SQLAlchemy over an app-created
+#     schema, and the service never opens an externally-supplied database
+#     file.
+# Accepted risk pending a Debian sqlite3 patch (fixed in sid/forky 3.53.4-2;
+# trixie marked <no-dsa>).
+CVE-2026-50812 until:2027-07-01
+CVE-2026-50813 until:2027-07-01
+
 # ===========================================================================
 # BACKPORT FALSE POSITIVES — NOT accepted risk.
 #

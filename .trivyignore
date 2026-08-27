@@ -4,10 +4,25 @@
 #   CVE-2023-12345
 #   GHSA-xxxx-yyyy-zzzz until:2026-06-01
 #
-# All entries below are for CVEs that are UNFIXED in Debian 13 Trixie
-# (python:3.13-slim base image) with no fix available via apt-get upgrade.
-# They are accepted risks, reviewed 2026-04-13. Expiry 2027-07-01 forces
-# re-evaluation; remove each entry once Debian ships a patched package.
+# This file has TWO sections, and they mean OPPOSITE things.  Read the
+# section header before adding an entry:
+#
+#   1. ACCEPTED RISK — everything from here down to the "BACKPORT FALSE
+#      POSITIVES" banner near the end of the file.  These CVEs are
+#      UNFIXED in Debian 13 Trixie (python:3.13-slim base image) with no
+#      fix available via apt-get upgrade, and each carries a written
+#      reachability analysis.  Reviewed 2026-04-13.  Expiry 2027-07-01
+#      forces re-evaluation; remove each entry once Debian ships a
+#      patched package.
+#
+#   2. BACKPORT FALSE POSITIVES — the final section.  These CVEs ARE
+#      fixed in the version we install; the scanner matches against the
+#      UPSTREAM fix version and does not recognise Debian's backport.
+#      Nothing is being accepted, so they carry SHORT expiries and are
+#      meant to be deleted, never renewed.
+#
+# Putting a fixed CVE in section 1 (or an unfixed one in section 2) makes
+# the file lie about the image's actual security posture.
 
 # ncurses 6.5+20250216-2: stack-based buffer overflow in infocmp
 # analyze_string. HIGH. Affects libncursesw6, libtinfo6, ncurses-base,
@@ -349,3 +364,52 @@ CVE-2026-11824 until:2027-07-01
 # Accepted risk pending a Debian bzip2 patch; remove this entry once
 # ``apt-get upgrade -y`` ships a fixed libbz2-1.0.
 CVE-2026-42250 until:2027-07-01
+
+# ===========================================================================
+# BACKPORT FALSE POSITIVES — NOT accepted risk.
+#
+# Everything above this banner is UNFIXED in Debian.  Entries below are the
+# opposite case: the CVE IS fixed in the package version the image installs,
+# and the scanner is simply wrong about it.  Deliberately SHORT expiries —
+# these are meant to be deleted once the scanner's data catches up, never
+# renewed.  A renewal request is a signal to re-verify the premise instead.
+# ===========================================================================
+
+# openssl 3.5.7-1~deb13u2 (python:3.13-slim / Debian 13 Trixie).  Reported
+# against three binary packages of the ``openssl`` source package as GitHub
+# code-scanning alerts #420 (libssl3t64), #425 (openssl) and #426
+# (openssl-provider-legacy), all HIGH, all CVE-2026-14456 — "Unbounded Memory
+# Growth in QUIC Server Incoming Channel Queue": a QUIC listener queues an
+# unbounded number of incoming channels for unknown destination connection
+# IDs, so a peer sending Initial packets faster than the application accepts
+# connections exhausts memory (DoS).
+#
+# THE IMAGE IS ALREADY PATCHED.  Debian DSA-6465-1 (2026-08-25) states: "For
+# the stable distribution (trixie), these problems have been fixed in version
+# 3.5.7-1~deb13u2" — which is EXACTLY the version Trivy itself reports as
+# installed.  The advisory landed two days before the image picked it up via
+# the ``apt-get upgrade -y`` in llm/Dockerfile.api.
+#
+# Why it is still reported: upstream OpenSSL fixed this in 3.5.8, and Debian
+# backported the patch into 3.5.7-1~deb13u2 rather than bumping the version.
+# A scanner matching on the UPSTREAM fix version sees 3.5.7 < 3.5.8 and calls
+# it vulnerable.  The tell for this class is the empty ``Fixed Version`` field
+# in the finding: Trivy has no Debian fixed-version mapping for it, so it is
+# not using Debian's advisory data.  Verified against
+# https://security-tracker.debian.org/tracker/CVE-2026-14456 on 2026-08-27.
+#
+# There is consequently NOTHING to upgrade to: trixie ships no openssl newer
+# than 3.5.7-1~deb13u2, and upstream 3.5.8 is not packaged for it.
+#
+# Secondary, independent of the patch: the vulnerable code path is the QUIC
+# SERVER listener (``SSL_LISTENER``), which this image never instantiates.
+# The container runs ``uvicorn llm.server:app`` speaking HTTP/1.1 on port
+# 8000; TLS is terminated by Caddy in a separate container using Go's
+# quic-go, not OpenSSL.  Python's ``ssl`` module exposes no QUIC server API
+# at all, and the image's only OpenSSL use is as a TLS *client* (outbound
+# HTTPS to the DeepSeek and Lichess APIs).
+#
+# REMOVE THIS ENTRY once the scan stops reporting CVE-2026-14456 — it should
+# expire, not be renewed.  If it is still firing at the expiry date, re-check
+# that the installed version is >= 3.5.7-1~deb13u2 BEFORE extending it.
+CVE-2026-14456 until:2026-11-01

@@ -65,7 +65,6 @@ from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_PATH = PROJECT_ROOT / "docker-compose.prod.yml"
 API_DOCKERFILE_PATH = PROJECT_ROOT / "llm" / "Dockerfile.api"

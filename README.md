@@ -489,8 +489,9 @@ authoritative.
 > A former Fly.io Node edge (`llm/server.js`, an Ollama prototype) was
 > removed 2026-07-15 — it never fronted `cereveon.com` (that resolves to
 > Hetzner's Caddy directly) and served only an unauthenticated,
-> validator-bypassing `/coach`·`/explain`. See the runbook for the
-> `flyctl apps destroy chesscoach` teardown step.
+> validator-bypassing `/coach`·`/explain`. The leftover `chesscoach` Fly
+> app was destroyed 2026-08-27, completing the teardown; Fly.io is no
+> longer part of the deployment surface.
 
 ### Container hardening
 

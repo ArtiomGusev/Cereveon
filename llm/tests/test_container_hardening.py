@@ -46,10 +46,19 @@ Stable test IDs (do NOT rename):
   CH_13  every prod service carries security_opt no-new-privileges:true
          (catch-all that fires when a new service is added without
          the universal hardening floor)
+  CH_14  the runtime image uninstalls pip (llm/Dockerfile.api)
+  CH_15  no ``pip install`` runs after that uninstall
+  CH_16  the uninstall targets pip ONLY — setuptools and wheel are
+         deliberately retained
+
+CH_14..CH_16 pin the image build rather than the compose file.  They
+live here because "what the runtime image is allowed to contain" is
+the same contract as "how the runtime container is allowed to run".
 """
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 from typing import Any
@@ -59,6 +68,7 @@ import yaml  # type: ignore[import-untyped]
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_PATH = PROJECT_ROOT / "docker-compose.prod.yml"
+API_DOCKERFILE_PATH = PROJECT_ROOT / "llm" / "Dockerfile.api"
 
 
 def _load_compose() -> dict[str, Any]:
@@ -101,6 +111,18 @@ def _has_tmpfs(svc: dict[str, Any], path: str) -> bool:
     # tmpfs entries may be ``"/tmp"`` or ``"/tmp:size=64m"``; match
     # by leading path segment.
     return any(str(t).split(":", 1)[0] == path for t in tmpfs)
+
+
+def _dockerfile_directives() -> str:
+    """``llm/Dockerfile.api`` with comment lines stripped.
+
+    The Dockerfile documents the pip purge at length in comments, and a
+    comment that merely *mentions* ``pip uninstall`` must not be able to
+    satisfy CH_14 on its own, so every assertion below runs against
+    build directives only.
+    """
+    text = API_DOCKERFILE_PATH.read_text(encoding="utf-8")
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +354,85 @@ class TestUniversalSecurityFloor(unittest.TestCase):
             f"carve-out set ({sorted(self._CH_13_CARVE_OUTS)}). Add the option "
             f"on the same commit that introduces the new service, or extend "
             f"the carve-out set here with the rationale comment.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Runtime image contents — llm/Dockerfile.api
+# ---------------------------------------------------------------------------
+
+
+class TestRuntimeImageDropsPip(unittest.TestCase):
+    """The published runtime image must not ship pip.
+
+    pip bundles a ``_vendor`` tree whose dependency pins are frozen at
+    whatever pip vendored (``pip/_vendor/vendor.txt``).  Image scanners
+    report those vendored copies as installed packages, and nothing in
+    this repo can move them — a vendored pin changes only when pip
+    upstream re-vendors it.  Uninstalling pip once the requirements are
+    resolved is what keeps them out of the image; it is also ordinary
+    hardening, because the runtime installs nothing (CMD is uvicorn and
+    the HEALTHCHECK is a python one-liner).
+
+    Concretely this closed code-scanning alerts #413 (msgpack 1.1.2,
+    GHSA-6v7p-g79w-8964) and #414 / #415 (setuptools 70.3.0,
+    CVE-2025-47273 / CVE-2026-59890).
+    """
+
+    _UNINSTALL_RE = re.compile(r"pip\s+uninstall\s+(?:--yes|-y)\s+([^\\\n]+)")
+
+    def setUp(self):
+        self.directives = _dockerfile_directives()
+
+    def test_ch_14_runtime_image_uninstalls_pip(self):
+        match = self._UNINSTALL_RE.search(self.directives)
+        self.assertIsNotNone(
+            match,
+            "CH_14: llm/Dockerfile.api must run `pip uninstall --yes pip` after "
+            "installing requirements.  Without it the image ships pip's bundled "
+            "_vendor tree, whose frozen pins (msgpack, setuptools) are reported by "
+            "the Trivy image scan and cannot be upgraded from this repo.",
+        )
+        assert match is not None  # narrows Optional for mypy
+        self.assertIn(
+            "pip",
+            match.group(1).split(),
+            f"CH_14: the `pip uninstall` in llm/Dockerfile.api does not target pip "
+            f"itself; it uninstalls {match.group(1).split()!r}.",
+        )
+
+    def test_ch_15_no_pip_install_after_the_uninstall(self):
+        uninstall_at = self.directives.find("pip uninstall")
+        self.assertNotEqual(
+            uninstall_at,
+            -1,
+            "CH_15 precondition: no `pip uninstall` found in llm/Dockerfile.api "
+            "(CH_14 covers the missing-uninstall case).",
+        )
+        self.assertNotIn(
+            "pip install",
+            self.directives[uninstall_at:],
+            "CH_15: a `pip install` appears AFTER the `pip uninstall` in "
+            "llm/Dockerfile.api.  pip no longer exists at that point, so the image "
+            "build fails with `pip: not found`.  Move the new install ahead of the "
+            "uninstall within the same RUN layer.",
+        )
+
+    def test_ch_16_setuptools_and_wheel_are_retained(self):
+        match = self._UNINSTALL_RE.search(self.directives)
+        self.assertIsNotNone(match, "CH_16 precondition: see CH_14.")
+        assert match is not None  # narrows Optional for mypy
+        targets = sorted(match.group(1).split())
+        self.assertEqual(
+            targets,
+            ["pip"],
+            f"CH_16: the runtime image must uninstall pip ONLY; got {targets!r}.  "
+            f"setuptools and wheel are retained deliberately — the setuptools "
+            f"installed in that same layer is past the CVE-2025-47273 (78.1.1) and "
+            f"CVE-2026-59890 (83.0.0) fixes so it carries no advisory, while "
+            f"removing it would strip pkg_resources from the image and break any "
+            f"dependency importing it at module load.  That trades a startup "
+            f"failure for zero scanner benefit.",
         )
 
 

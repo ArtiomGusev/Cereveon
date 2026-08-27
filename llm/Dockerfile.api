@@ -28,9 +28,33 @@ COPY llm/requirements.txt /app/requirements.txt
 # tied to specific minor versions of pip itself, not project deps).
 # Same BUILDDATE cache-bust applies — without it, this layer survives
 # across CI runs and the patched pip never reaches the published image.
+#
+# pip is then UNINSTALLED, because the runtime never installs anything:
+# CMD is uvicorn and the HEALTHCHECK is a python one-liner.  Beyond the
+# usual "don't ship a package installer in a runtime image" hardening,
+# this is the only way to clear three Trivy findings.  pip carries a
+# bundled ``_vendor`` tree pinned by ``pip/_vendor/vendor.txt``, and
+# those vendored copies — msgpack 1.1.2 (GHSA-6v7p-g79w-8964) and
+# setuptools 70.3.0 (CVE-2025-47273, CVE-2026-59890), code-scanning
+# alerts #413-#415 — are what the image scan reports.  They are NOT
+# application dependencies: the resolved runtime tree is 34 packages
+# and contains neither.  They also cannot be upgraded from here; a
+# vendored pin only moves when pip upstream re-vendors it.
+#
+# The real setuptools installed above (84.0.0, past the 78.1.1 and
+# 83.0.0 fixes) and wheel both STAY.  Removing them would strip
+# ``pkg_resources`` from the image and break any dependency that
+# imports it at module load, for no scanner benefit — neither carries
+# an advisory at that version.
+#
+# ``/usr/local/bin/pip`` is a symlink the base image points at
+# ``pip3``, which pip's own uninstall removes; delete it in the same
+# step so the image is not left with a dangling symlink.
 RUN echo "Cache bust: ${BUILDDATE}" \
     && pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r /app/requirements.txt
+    && pip install --no-cache-dir -r /app/requirements.txt \
+    && pip uninstall --yes pip \
+    && rm -f /usr/local/bin/pip
 
 # copy only llm code
 COPY llm /app/llm

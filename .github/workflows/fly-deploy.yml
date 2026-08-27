@@ -535,7 +535,13 @@ jobs:
           TRIVY_USERNAME: ${{ github.repository_owner }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
 
+      # The SARIF stream is the triage queue's only feed: HIGH+CRITICAL
+      # including unfixed, which is what populates the Security tab.  It is
+      # deliberately non-blocking (``continue-on-error`` here, ``exit-code: 0``
+      # below), so its outcome needs an explicit consumer — see the "Warn if
+      # the SARIF triage feed did not publish" step after the upload.
       - name: Generate llm API image SARIF
+        id: trivy-api-sarif
         continue-on-error: true
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -564,6 +570,38 @@ jobs:
         with:
           sarif_file: trivy-api-image.sarif
           category: trivy-api-image
+
+      # Both steps above can no-op SILENTLY: generation carries
+      # ``continue-on-error``, and the upload is guarded by
+      # ``hashFiles(...) != ''`` which simply skips when no file was produced.
+      # So a broken scan config, a renamed output file, or an upstream action
+      # change would quietly freeze the Security tab while this job still
+      # reported success.  That matters because an empty Trivy alert queue is
+      # read as "nothing to triage" — it must never be able to mean "nothing
+      # was reported".
+      #
+      # Deliberately a WARNING and not a failure.  This is the visibility path,
+      # not the safety-critical one: the terminal gate below is what blocks a
+      # bad image, and coupling production deploys to a SARIF upload hiccup
+      # would trade a real availability risk for an informational one.  A
+      # persistent breakage annotates every run on main, which is the signal to
+      # act on; a one-off is a re-run.
+      - name: Warn if the SARIF triage feed did not publish
+        if: steps.trivy-api-sarif.outcome == 'failure' || hashFiles('trivy-api-image.sarif') == ''
+        env:
+          SARIF_OUTCOME: ${{ steps.trivy-api-sarif.outcome }}
+          SARIF_PRESENT: ${{ hashFiles('trivy-api-image.sarif') != '' }}
+        run: |
+          echo "::warning title=Trivy SARIF not published::Image-scan findings did not reach the Security tab for this run."
+          echo "Generate step outcome : ${SARIF_OUTCOME}"
+          echo "SARIF file produced   : ${SARIF_PRESENT}"
+          echo ""
+          echo "Consequence: code-scanning alerts for this image were NOT refreshed this run,"
+          echo "so an empty Trivy alert queue right now means 'not reported', not 'nothing found'."
+          echo "Do not read the queue as clean until a later run publishes successfully."
+          echo ""
+          echo "One-off  : usually a registry or Trivy DB hiccup — re-run this job."
+          echo "Repeated : treat the queue as STALE and check this job's scan configuration."
 
       # Terminal gate.  Deliberately LAST so the SARIF above is published
       # first — a failing scan must still reach the Security tab.  Mirrors the

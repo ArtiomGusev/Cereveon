@@ -216,6 +216,33 @@ def test_ci_workflow_hardens_checkout_and_supply_chain_controls():  # pylint: di
         "Upload llm API image scan results"
     )
 
+    # The SARIF feed is deliberately non-blocking, so its outcome needs an
+    # explicit consumer too.  Without one, a failed generation silently skips
+    # the upload — whose ``if:`` is only a hashFiles guard — and the Security
+    # tab freezes while the job still reports success, which would let an empty
+    # alert queue mean "nothing was reported" rather than "nothing was found".
+    assert sarif_api["id"] == "trivy-api-sarif"
+
+    sarif_warn = _step_named(image_security, "Warn if the SARIF triage feed did not publish")
+    assert "steps.trivy-api-sarif.outcome == 'failure'" in sarif_warn["if"]
+    assert "hashFiles('trivy-api-image.sarif') == ''" in sarif_warn["if"]
+    assert "::warning" in sarif_warn["run"]
+
+    # It must stay a WARNING.  The SARIF feed is the visibility path, not the
+    # safety-critical one; failing here would let a transient upload hiccup
+    # block a production deploy.  The terminal gate asserted above is what
+    # blocks a bad image.
+    assert "exit 1" not in sarif_warn["run"]
+
+    # It runs after the upload (so it can observe the result) but before the
+    # terminal gate — which, exiting non-zero, would otherwise end the job
+    # first and suppress the warning entirely.
+    assert (
+        step_names.index("Upload llm API image scan results")
+        < step_names.index("Warn if the SARIF triage feed did not publish")
+        < step_names.index("Fail on fixable CRITICAL image findings")
+    )
+
 
 def test_security_workflow_uses_safe_checkout_and_codeql_v4():
     workflow = _load_workflow("security.yml")

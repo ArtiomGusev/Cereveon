@@ -499,6 +499,20 @@ jobs:
           key: trivy-db-${{ runner.os }}-${{ github.run_id }}
           restore-keys: trivy-db-${{ runner.os }}-
 
+      # This is the DEPLOY GATE: severity CRITICAL + ignore-unfixed, so every
+      # finding it reports is actionable (a patched package exists).
+      #
+      # ``continue-on-error`` is REQUIRED here and must not be removed: it lets
+      # the SARIF steps below still run and publish to the Security tab when the
+      # gate trips, which is exactly when that visibility matters most.  The
+      # exit code is not discarded — the terminal "Fail on fixable CRITICAL"
+      # step re-raises it once the SARIF is uploaded.  Deleting either half
+      # silently disarms the gate, which is exactly how this job spent its
+      # whole life until now: the step carried ``continue-on-error`` with no
+      # consumer for ``steps.trivy-api-image.outcome`` anywhere (it predates
+      # the 2026-05-04 history squash), so ``image-security`` always concluded
+      # success and the ``deploy`` job that lists it in ``needs`` could never
+      # be blocked by a CRITICAL finding.
       - name: Scan published llm API image
         id: trivy-api-image
         continue-on-error: true
@@ -550,6 +564,24 @@ jobs:
         with:
           sarif_file: trivy-api-image.sarif
           category: trivy-api-image
+
+      # Terminal gate.  Deliberately LAST so the SARIF above is published
+      # first — a failing scan must still reach the Security tab.  Mirrors the
+      # "Fail on Trivy misconfig findings" step in security.yml, which the
+      # image scan was missing.
+      - name: Fail on fixable CRITICAL image findings
+        if: steps.trivy-api-image.outcome == 'failure'
+        run: |
+          echo "::error::Trivy found CRITICAL vulnerabilities WITH AN AVAILABLE FIX in the published API image."
+          echo "The scan step ran with severity=CRITICAL and ignore-unfixed=true, so every finding"
+          echo "it reports is actionable: Debian (or the package index) already ships a patched version."
+          echo ""
+          echo "Fix by upgrading the affected package. Do NOT silence it in .trivyignore --"
+          echo "that file's accepted-risk section is scoped to CVEs with NO fix available,"
+          echo "and adding a fixable one there would make it misreport the image's posture."
+          echo ""
+          echo "See the 'Scan published llm API image' step log above for the findings table."
+          exit 1
 
 
   deploy:

@@ -194,6 +194,28 @@ def test_ci_workflow_hardens_checkout_and_supply_chain_controls():  # pylint: di
     assert sarif_api["env"]["TRIVY_SKIP_DB_UPDATE"] == "true"
     assert sarif_api["env"]["TRIVY_USERNAME"] == "${{ github.repository_owner }}"
 
+    # The gate must actually be able to fail the job.  ``continue-on-error`` on
+    # the scan step is deliberate — it lets the SARIF steps publish even when
+    # the gate trips — so the swallowed exit code has to be re-raised by a
+    # terminal step.  Without that step the job's conclusion is unconditionally
+    # success and ``deploy``, which lists image-security in ``needs``, can never
+    # be blocked by a fixable CRITICAL.  Both halves are load-bearing; assert
+    # them together so removing either one fails here.
+    assert scan_api["continue-on-error"] is True
+    assert scan_api["with"]["exit-code"] == "1"
+
+    fail_step = _step_named(image_security, "Fail on fixable CRITICAL image findings")
+    assert "steps.trivy-api-image.outcome == 'failure'" in fail_step["if"]
+    assert "exit 1" in fail_step["run"]
+
+    # Ordering matters: the failure is raised AFTER the SARIF upload.  Raised
+    # any earlier, a tripped gate aborts the job before the findings reach the
+    # Security tab — losing visibility at the exact moment it matters most.
+    step_names = [step.get("name") for step in image_security["steps"]]
+    assert step_names.index("Fail on fixable CRITICAL image findings") > step_names.index(
+        "Upload llm API image scan results"
+    )
+
 
 def test_security_workflow_uses_safe_checkout_and_codeql_v4():
     workflow = _load_workflow("security.yml")

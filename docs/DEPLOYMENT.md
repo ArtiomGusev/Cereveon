@@ -25,9 +25,15 @@ The workflow filename is historical (it pre-dates both the rename to a unified C
 > resolved to Hetzner's Caddy directly, and the Fly app's only routes were
 > an unauthenticated, validator-bypassing `/coach`·`/explain` that 502'd on
 > a non-existent Ollama upstream. The edge image, `fly-deploy` job, Node
-> dependency audit, and `FLY_API_TOKEN` were removed. **To finish tearing
-> it down**, destroy the still-running Fly app once: `flyctl apps destroy
-> chesscoach`.
+> dependency audit, and `FLY_API_TOKEN` were removed.
+>
+> **Teardown completed 2026-08-27.** The `chesscoach` Fly app outlived the
+> code removal by six weeks — two `shared-cpu-1x:512MB` machines in `fra`
+> had been `started` continuously since 2026-02-23, still serving the
+> deleted `llm/server.js` — and was destroyed with `flyctl apps destroy
+> chesscoach`. No volumes or Postgres clusters were attached, so nothing
+> persistent was lost, and `cereveon.com` was unaffected. Fly.io is no
+> longer part of the deployment surface; nothing here requires `flyctl`.
 
 ### Manual updates
 

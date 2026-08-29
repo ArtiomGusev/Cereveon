@@ -19,7 +19,7 @@ jobs:
     name: Build & test (iOS Simulator)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # XcodeGen (latest, via brew) emits the Xcode 16 project format
       # (objectVersion 77), so the Xcode that reads it must be >= 16.

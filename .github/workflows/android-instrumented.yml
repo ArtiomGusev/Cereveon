@@ -48,7 +48,7 @@ jobs:
       ANDROID_USER_HOME: ${{ github.workspace }}/.android
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 

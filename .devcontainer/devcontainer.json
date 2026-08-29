@@ -10,7 +10,7 @@
     "SECA_API_KEY": "dev-key",
     "SECA_ENV": "dev",
     "COACH_DEEPSEEK_API_BASE": "https://api.deepseek.com",
-    "COACH_DEEPSEEK_MODEL": "deepseek-chat"
+    "COACH_DEEPSEEK_MODEL": "deepseek-v4-flash"
   },
   "//": "COACH_DEEPSEEK_API_KEY is intentionally not pre-set in remoteEnv — devcontainer users must export it via `export COACH_DEEPSEEK_API_KEY=...` in their shell or set it in `.env`. Without it, /chat falls back to deterministic templates and the api still serves.",
   "customizations": {

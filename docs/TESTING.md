@@ -511,7 +511,7 @@ After any system prompt change
 After any RAG document content change
 
 After updating or replacing the LLM model
-(e.g., bumping `COACH_DEEPSEEK_MODEL` from `deepseek-chat` to `deepseek-reasoner`,
+(e.g., bumping `COACH_DEEPSEEK_MODEL` from `deepseek-v4-flash` to `deepseek-v4-pro`,
 or switching to a different OpenAI-compatible provider)
 
 Command:

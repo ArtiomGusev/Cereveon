@@ -441,7 +441,7 @@ need most often.
 | `SECRET_KEY` | — | JWT signing secret (≥ 32 chars; required in `prod`). |
 | `COACH_DEEPSEEK_API_KEY` | — | **Required for LLM coaching**. Sign up at [platform.deepseek.com](https://platform.deepseek.com), create a key, paste here. Without it the api still serves but every `/chat` call falls back to the deterministic template. |
 | `COACH_DEEPSEEK_API_BASE` | `https://api.deepseek.com` | OpenAI-compatible endpoint. Override only when pointing at a self-hosted gateway (LiteLLM, vLLM, etc.). |
-| `COACH_DEEPSEEK_MODEL` | `deepseek-chat` | DeepSeek-V3. Strong general-purpose; ~$0.14/M input + $0.28/M output. Alternative `deepseek-reasoner` (chain-of-thought) is ~4× cost — usually overkill for explain-the-position prose. |
+| `COACH_DEEPSEEK_MODEL` | `deepseek-v4-flash` | DeepSeek-V4 non-thinking (successor to the retired `deepseek-chat`); ~$0.14/M input + $0.28/M output. Alternative `deepseek-v4-pro` (thinking) costs more — usually overkill for explain-the-position prose. |
 | `STOCKFISH_PATH` | auto-detected | Override Stockfish binary path. |
 | `REDIS_URL` | *(unset)* | Redis URL for the L2 move cache; in-memory only when unset. |
 | `DATABASE_URL` | `sqlite:///data/seca.db` | SQLAlchemy DSN. PostgreSQL required for multi-worker deployments. |

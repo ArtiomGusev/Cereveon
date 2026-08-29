@@ -9,7 +9,7 @@ kotlin = "2.4.0"
 # version this runtime was built against — 1.11.0 is built on Kotlin
 # 2.3.20 and the plugin is 2.4.0, so the bound holds.
 kotlinxSerializationJson = "1.11.0"
-coreKtx = "1.17.0"
+coreKtx = "1.19.0"
 junit = "4.13.2"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
